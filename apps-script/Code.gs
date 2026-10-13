@@ -29,28 +29,65 @@ function configurar() {
   let pred = ss.getSheetByName(HOJA_PRED);
   if (!pred) pred = ss.insertSheet(HOJA_PRED);
   if (pred.getLastRow() === 0) {
-    pred.appendRow(['fecha', 'nombre', 'mision_id', 'mision', 'origen', 'dispositivo']);
+    pred.appendRow(['fecha', 'nombre', 'mision_id', 'mision', 'origen', 'dispositivo', 'apodo']);
     pred.setFrozenRows(1);
   }
   let cfg = ss.getSheetByName(HOJA_CONFIG);
   if (!cfg) cfg = ss.insertSheet(HOJA_CONFIG);
   if (cfg.getLastRow() === 0) {
-    const clave = Utilities.getUuid().slice(0, 8);
     cfg.getRange(1, 1, 4, 3).setValues([
       ['clave', 'valor', 'nota'],
       ['estado', 'abierta', 'abierta | solo_kiosko | cerrada | revelado'],
-      ['clave_kiosko', clave, 'Abre la página con ?kiosko=' + clave + ' en la computadora del kiosko'],
+      ['clave_kiosko', '', ''],
       ['mision_real_id', '', 'ID de la misión real (de misiones.csv). Llénalo y pon estado = revelado'],
     ]);
     cfg.setFrozenRows(1);
+    nuevaClaveKiosko();
   }
+  asegurarColumnaApodo_();
   CacheService.getScriptCache().remove(CACHE_KEY);
+}
+
+/**
+ * Crea una clave nueva para el kiosko (solo letras, para que Sheets no la convierta en número)
+ * y la escribe en Config. Ejecútala desde el editor si la clave se filtró o dejó de funcionar.
+ * El link para el kiosko aparece en el registro de ejecución y en la nota de Config.
+ */
+function nuevaClaveKiosko() {
+  const letras = 'abcdefghjkmnpqrstuvwxyz';
+  let clave = '';
+  for (let i = 0; i < 10; i++) clave += letras.charAt(Math.floor(Math.random() * letras.length));
+  const cfg = SpreadsheetApp.getActive().getSheetByName(HOJA_CONFIG);
+  const valores = cfg.getDataRange().getValues();
+  let fila = -1;
+  for (let i = 1; i < valores.length; i++) if (String(valores[i][0]).trim() === 'clave_kiosko') fila = i + 1;
+  if (fila === -1) { cfg.appendRow(['clave_kiosko']); fila = cfg.getLastRow(); }
+  cfg.getRange(fila, 2).setNumberFormat('@').setValue(clave);
+  cfg.getRange(fila, 3).setValue('Abre la página con ?kiosko=' + clave + ' en la computadora del kiosko');
+  Logger.log('Nueva clave del kiosko: ' + clave + '  →  agrega ?kiosko=' + clave + ' al final de la dirección de tu página');
+  return clave;
+}
+
+/** Hojas creadas con versiones anteriores no tenían la columna "apodo". */
+function asegurarColumnaApodo_() {
+  const hoja = SpreadsheetApp.getActive().getSheetByName(HOJA_PRED);
+  if (hoja && hoja.getLastRow() > 0 && String(hoja.getRange(1, 7).getValue()).trim() !== 'apodo') {
+    hoja.getRange(1, 7).setValue('apodo');
+  }
+}
+
+/** Compara claves sin importar mayúsculas ni espacios. */
+function claveValida_(recibida, guardada) {
+  const a = String(recibida || '').trim().toLowerCase();
+  const b = String(guardada || '').trim().toLowerCase();
+  return a.length > 0 && a === b;
 }
 
 function leerConfig_() {
   const cfg = SpreadsheetApp.getActive().getSheetByName(HOJA_CONFIG);
   const out = {};
-  cfg.getDataRange().getValues().slice(1).forEach(function (r) {
+  // getDisplayValues: se lee el texto tal como se ve en la hoja (evita que una clave se lea como número)
+  cfg.getDataRange().getDisplayValues().slice(1).forEach(function (r) {
     out[String(r[0]).trim()] = String(r[1]).trim();
   });
   if (ESTADOS.indexOf(out.estado) < 0) out.estado = 'cerrada';
@@ -71,12 +108,14 @@ function doGet(e) {
   const cfg = leerConfig_();
   const hoja = SpreadsheetApp.getActive().getSheetByName(HOJA_PRED);
   const filas = hoja.getLastRow() > 1
-    ? hoja.getRange(2, 1, hoja.getLastRow() - 1, 3).getValues()
+    ? hoja.getRange(2, 1, hoja.getLastRow() - 1, 7).getValues()
     : [];
   const predicciones = filas
     .filter(function (r) { return r[1] && r[2]; })
     .map(function (r) {
-      return { f: new Date(r[0]).getTime(), n: String(r[1]), m: Number(r[2]) };
+      const p = { f: new Date(r[0]).getTime(), n: String(r[1]), m: Number(r[2]) };
+      if (r[6]) p.a = String(r[6]);
+      return p;
     });
   const texto = JSON.stringify({
     ok: true,
@@ -100,7 +139,7 @@ function doPost(e) {
   if (datos.accion === 'admin') return admin_(datos);
 
   const cfg = leerConfig_();
-  const esKiosko = !!datos.kiosko && datos.kiosko === cfg.clave_kiosko;
+  const esKiosko = claveValida_(datos.kiosko, cfg.clave_kiosko);
   if (cfg.estado === 'cerrada' || cfg.estado === 'revelado') {
     return json_({ ok: false, error: 'La votación ya está cerrada.', estado: cfg.estado });
   }
@@ -109,6 +148,7 @@ function doPost(e) {
   }
 
   const nombre = limpiar_(datos.nombre).slice(0, 60);
+  const apodo = limpiar_(datos.apodo).slice(0, 25);
   if (nombre.length < 3) return json_({ ok: false, error: 'Escribe tu nombre y apellido.' });
 
   const misiones = (Array.isArray(datos.misiones) ? datos.misiones : [])
@@ -156,7 +196,8 @@ function doPost(e) {
     if (previas.length + nuevas.length > MAX_POR_PERSONA) {
       return json_({ ok: false, error: 'Solo te queda ' + (MAX_POR_PERSONA - previas.length) + ' predicción.' });
     }
-    filas = nuevas.map(function (x) { return [ahora, nombre, x.id, x.n, origen, disp]; });
+    asegurarColumnaApodo_();
+    filas = nuevas.map(function (x) { return [ahora, nombre, x.id, x.n, origen, disp, apodo]; });
     hoja.getRange(hoja.getLastRow() + 1, 1, filas.length, filas[0].length).setValues(filas);
     SpreadsheetApp.flush();
   } finally {
@@ -170,8 +211,11 @@ function doPost(e) {
 /** Panel de control del kiosko: cambia el estado y/o la misión real. Requiere la clave del kiosko. */
 function admin_(d) {
   const cfg = leerConfig_();
-  if (!d.kiosko || d.kiosko !== cfg.clave_kiosko) {
-    return json_({ ok: false, error: 'Esta computadora no tiene permiso para controlar la votación.' });
+  if (!claveValida_(d.kiosko, cfg.clave_kiosko)) {
+    return json_({
+      ok: false, codigo: 'clave',
+      error: 'La clave de esta computadora no coincide con la de la hoja (pestaña Config, fila clave_kiosko).',
+    });
   }
   const cambios = {};
   if (d.estado !== undefined) {

@@ -68,6 +68,16 @@ Los cambios se reflejan en la página en unos 15 segundos.
 (la clave está en `Config → clave_kiosko`). Ese navegador queda marcado: no recuerda nombres
 y después de cada voto muestra **Siguiente persona**. Para quitarlo, abre la página con `?kiosko=`.
 
+**Si el panel dice que la clave no coincide:** en Apps Script elige la función `nuevaClaveKiosko` y pulsa
+**Ejecutar**. Crea una clave nueva (solo letras) en Config y la muestra en el registro. Luego abre en el kiosko
+la página con `?kiosko=` y esa clave nueva.
+
+## Apodos
+
+Debajo del apellido hay un enlace discreto "¿Quieres agregar tu apodo?". Si alguien pone un apodo, en el mapa,
+la lista y el ranking se ve el apodo en lugar del nombre. En el kiosko se ve también el nombre real.
+El límite de predicciones y la espera siguen usando el nombre y apellido.
+
 ## Reglas del ranking
 
 - Cada persona puede hacer **máximo 2 predicciones** (juntas o una y luego otra). Apps Script lo valida

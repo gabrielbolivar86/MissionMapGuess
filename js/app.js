@@ -58,7 +58,7 @@
   // Modo kiosko: se activa abriendo la página con ?kiosko=CLAVE (queda guardado en ese navegador)
   const params = new URLSearchParams(location.search);
   if (params.has("kiosko")) {
-    const v = params.get("kiosko");
+    const v = (params.get("kiosko") || "").trim();
     if (v) store.set("kiosko", v); else store.del("kiosko");
     params.delete("kiosko");
     const q = params.toString();
@@ -119,7 +119,7 @@
       if (previas.length + nuevas.length > MAX_POR_PERSONA) return Promise.resolve({ ok: false, error: `Solo te queda ${MAX_POR_PERSONA - previas.length} predicción.` });
       p.misiones = nuevas;
       const f = Date.now();
-      p.misiones.forEach((m) => lista.push({ f, n: p.nombre, m: m.id }));
+      p.misiones.forEach((m) => lista.push(p.apodo ? { f, n: p.nombre, m: m.id, a: p.apodo } : { f, n: p.nombre, m: m.id }));
       store.set("demo_pred", JSON.stringify(lista));
       return Promise.resolve({ ok: true, guardadas: p.misiones.length });
     },
@@ -149,15 +149,18 @@
   // Enviar la predicción de otra persona desde este mismo celular (sin perder el nombre propio)
   let modoOtra = false;
   let nombrePropio = "";
+  let apodo = "";         // apodo opcional que se muestra en lugar del nombre
+  let apodoPropio = "";
   function empezarOtraPersona() {
     if (!puedeVotar()) return;
-    if (!modoOtra) { nombrePropio = nombre; modoOtra = true; }
-    nombre = "";
+    if (!modoOtra) { nombrePropio = nombre; apodoPropio = apodo; modoOtra = true; }
+    nombre = ""; apodo = "";
     pedirNombre();
   }
   function terminarOtraPersona() {
     if (!modoOtra) return;
     nombre = nombrePropio;
+    apodo = apodoPropio;
     modoOtra = false;
   }
 
@@ -173,6 +176,9 @@
     const vacio = KIOSKO || modoOtra;
     $("nombre").value = vacio ? "" : (store.get("nombre_n") || "");
     $("apellido").value = vacio ? "" : (store.get("nombre_a") || "");
+    const apodoGuardado = vacio ? "" : (store.get("apodo") || "");
+    $("apodo").value = apodoGuardado;
+    mostrarCampoApodo(!!apodoGuardado);
     $("titulo-nombre").textContent = modoOtra ? "¿De quién es esta predicción?" : "¿Quién eres?";
     $("ayuda-nombre").textContent = modoOtra
       ? "Escribe el nombre y apellido de la persona a la que estás ayudando."
@@ -192,7 +198,11 @@
     if (a.length < 2) { $("error-nombre").textContent = "Escribe tu apellido."; $("apellido").focus(); return; }
     $("error-nombre").textContent = "";
     nombre = n + " " + a;
-    if (!KIOSKO && !modoOtra) { store.set("nombre", nombre); store.set("nombre_n", n); store.set("nombre_a", a); }
+    apodo = $("campo-apodo").hidden ? "" : limpio("apodo").slice(0, 25);
+    if (!KIOSKO && !modoOtra) {
+      store.set("nombre", nombre); store.set("nombre_n", n); store.set("nombre_a", a);
+      if (apodo) store.set("apodo", apodo); else store.del("apodo");
+    }
     if (restantesDe(nombre) <= 0) {
       if (KIOSKO || modoOtra) {
         $("error-nombre").textContent = `${nombre} ya hizo sus ${MAX_POR_PERSONA} predicciones.`;
@@ -205,6 +215,14 @@
     }
     abrirFormularioMision();
   });
+
+  function mostrarCampoApodo(mostrar) {
+    $("campo-apodo").hidden = !mostrar;
+    $("btn-apodo").hidden = mostrar;
+    $("btn-apodo").setAttribute("aria-expanded", String(mostrar));
+  }
+  $("btn-apodo").addEventListener("click", () => { mostrarCampoApodo(true); $("apodo").focus(); });
+  $("btn-quitar-apodo").addEventListener("click", () => { $("apodo").value = ""; mostrarCampoApodo(false); $("btn-apodo").focus(); });
 
   $("btn-cambiar-nombre").addEventListener("click", () => {
     nombre = "";
@@ -243,7 +261,7 @@
       ? `Ya elegiste ${POR_ID.get(ya[0]) ? POR_ID.get(ya[0]).n : "una misión"}, que es la que cuenta para el premio. Puedes agregar 1 opción más.`
       : `Escribe una ciudad o país y elige de la lista. Puedes poner hasta ${MAX_POR_PERSONA} misiones; para el premio solo cuenta la primera.`;
     $("quien-texto").textContent = modoOtra ? "Votando por " : "Votando como ";
-    $("quien-nombre").textContent = nombre;
+    $("quien-nombre").textContent = apodo ? `${apodo} (${nombre})` : nombre;
     $("error-mision").textContent = "";
     pintarOpciones();
     mostrar("paso-mision");
@@ -378,6 +396,7 @@
         nombre,
         misiones: ids.map((id) => ({ id, n: POR_ID.get(id).n })),
         kiosko: KIOSKO,
+        apodo,
         dispositivo: dispositivoId(),
       });
       if (!r.ok) {
@@ -509,7 +528,7 @@
 
   function popupHtml(id) {
     const m = POR_ID.get(id);
-    const quienes = prediccionesVisibles().filter((p) => p.m === id).map((p) => p.n);
+    const quienes = prediccionesVisibles().filter((p) => p.m === id).map((p) => p.v);
     const unicos = [...new Set(quienes)];
     const ya = nombre ? prediccionesDe(nombre) : [];
     const puedeElegir = puedeVotar() && (!nombre || (ya.length < MAX_POR_PERSONA && !ya.includes(id)));
@@ -547,12 +566,13 @@
     for (const p of prediccionesVisibles()) {
       if (!POR_ID.has(p.m)) continue;
       if (!grupos.has(p.m)) grupos.set(p.m, new Set());
-      grupos.get(p.m).add(p.n);
+      // Etiqueta corta: el apodo completo, o solo el primer nombre
+      grupos.get(p.m).add(p.apodo ? p.v : p.v.split(" ")[0]);
     }
     for (const [id, set] of grupos) {
       const m = POR_ID.get(id);
       const nombres = [...set];
-      const corto = (n) => n.split(" ")[0];
+      const corto = (n) => n;
       const etiqueta = nombres.length <= 2 ? nombres.map(corto).join(", ") : `${corto(nombres[0])}, ${corto(nombres[1])} +${nombres.length - 2}`;
       const esReal = datos.mision_real_id === id;
       L.marker([m.lat, m.lng], {
@@ -583,7 +603,8 @@
 
   // En el mapa se ven hasta 2 predicciones por persona
   function prediccionesVisibles() {
-    return agruparPorPersona().flatMap((per) => per.preds.slice(0, MAX_POR_PERSONA));
+    return agruparPorPersona().flatMap((per) =>
+      per.preds.slice(0, MAX_POR_PERSONA).map((p) => ({ ...p, v: per.visible, apodo: !!per.apodo })));
   }
 
   // ---------- Hoja deslizable (celular) ----------
@@ -596,7 +617,7 @@
   $("btn-hoja").addEventListener("click", () => abrirHoja(!$("panel").classList.contains("abierta")));
   $("btn-barra-accion").addEventListener("click", (e) => {
     if (e.currentTarget.dataset.otra === "true") return empezarOtraPersona();
-    if (KIOSKO) { nombre = ""; }
+    if (KIOSKO) { nombre = ""; apodo = ""; }
     irAPrimerPaso();
   });
 
@@ -606,20 +627,23 @@
     const ordenadas = [...datos.predicciones].sort((a, b) => a.f - b.f);
     for (const p of ordenadas) {
       const k = norm(p.n);
-      if (!personas.has(k)) personas.set(k, { nombre: p.n, preds: [], vistos: new Set() });
+      if (!personas.has(k)) personas.set(k, { nombre: p.n, apodo: "", preds: [], vistos: new Set() });
       const per = personas.get(k);
+      if (p.a) per.apodo = p.a;
       if (per.vistos.has(p.m)) continue; // misma misión repetida: no cuenta dos veces
       per.vistos.add(p.m);
       per.preds.push(p);
     }
-    return [...personas.values()];
+    const lista = [...personas.values()];
+    lista.forEach((per) => { per.visible = per.apodo || per.nombre; });
+    return lista;
   }
 
   function pintarPanel() {
     const personas = agruparPorPersona();
     $("cuenta").textContent = personas.length ? `(${personas.length} ${personas.length === 1 ? "persona" : "personas"})` : "";
     $("personas").innerHTML = personas.length
-      ? [...personas].reverse().map((per) => `<li class="persona"><div class="persona-nombre">${esc(per.nombre)}</div><ol>${
+      ? [...personas].reverse().map((per) => `<li class="persona"><div class="persona-nombre">${esc(per.visible)}${per.apodo && KIOSKO ? ` <small class="nombre-real">${esc(per.nombre)}</small>` : ""}</div><ol>${
         per.preds.map((p, i) => {
           const m = POR_ID.get(p.m);
           if (!m) return "";
@@ -672,12 +696,12 @@
         const d = m.id === real.id ? 0 : km(m, real);
         if (!mejor || d < mejor.d) mejor = { d, m, f: p.f };
       });
-      return mejor && { nombre: per.nombre, ...mejor };
+      return mejor && { nombre: per.visible, real: per.apodo ? per.nombre : "", ...mejor };
     }).filter(Boolean);
     filas.sort((a, b) => a.d - b.d || a.f - b.f);
     $("ranking-lista").innerHTML = filas.map((r, i) => `<li>
         <span class="pos">${i + 1}.</span>
-        <span>${esc(r.nombre)}<small>${esc(r.m.n)}</small></span>
+        <span>${esc(r.nombre)}${r.real && KIOSKO ? ` <span class="nombre-real">(${esc(r.real)})</span>` : ""}<small>${esc(r.m.n)}</small></span>
         <span class="km ${r.d === 0 ? "exacto" : ""}">${r.d === 0 ? "¡Exacto!" : Math.round(r.d).toLocaleString("es") + " km"}</span>
       </li>`).join("");
   }
@@ -718,7 +742,11 @@
     botones.forEach((b) => { b.disabled = true; });
     try {
       const r = await api.admin(payload);
-      if (!r.ok) { $("error-control").textContent = r.error || "No se pudo aplicar el cambio."; return; }
+      if (!r.ok) {
+        $("error-control").textContent = (r.error || "No se pudo aplicar el cambio.") +
+          (r.codigo === "clave" ? ` Esta computadora tiene guardada la clave "${KIOSKO}". Abre la página con ?kiosko= y la clave exacta de la hoja.` : "");
+        return;
+      }
       datos.estado = r.estado;
       datos.mision_real_id = r.mision_real_id || null;
       realCentrada = false;
@@ -771,7 +799,7 @@
     if (b) { abrirHoja(false); enfocarMision(Number(b.dataset.ir)); }
   });
   $("btn-nueva").addEventListener("click", irAPrimerPaso);
-  $("btn-siguiente").addEventListener("click", () => { nombre = ""; irAPrimerPaso(); });
+  $("btn-siguiente").addEventListener("click", () => { nombre = ""; apodo = ""; irAPrimerPaso(); });
   $("btn-otra-persona").addEventListener("click", empezarOtraPersona);
   $("btn-actualizar").addEventListener("click", async () => {
     const faltan = Math.ceil((Number(store.get("ultima_act") || 0) + ESPERA_SEG * 1000 - Date.now()) / 1000);
@@ -787,7 +815,7 @@
     try {
       const r = await api.listar();
       if (r && r.ok) {
-        datos = { estado: r.estado, mision_real_id: r.mision_real_id || null, predicciones: (r.predicciones || []).map((p) => ({ f: Number(p.f), n: String(p.n), m: Number(p.m) })) };
+        datos = { estado: r.estado, mision_real_id: r.mision_real_id || null, predicciones: (r.predicciones || []).map((p) => ({ f: Number(p.f), n: String(p.n), m: Number(p.m), a: p.a ? String(p.a) : "" })) };
       }
     } catch (err) {
       toast("No se pudo actualizar la lista. Revisa tu conexión.");
@@ -819,7 +847,7 @@
     $("placa-nombre").textContent = placa;
     $("titulo-mision").textContent = `¿A qué misión crees que irá ${CFG.MISIONERO || "nuestro misionero"}?`;
     $("kiosko-chip").hidden = !KIOSKO;
-    if (!KIOSKO) nombre = store.get("nombre") || "";
+    if (!KIOSKO) { nombre = store.get("nombre") || ""; apodo = store.get("apodo") || ""; }
 
     if (typeof L === "undefined") {
       fallaCarga("No se pudo cargar la librería del mapa (Leaflet). Revisa tu conexión y recarga.");

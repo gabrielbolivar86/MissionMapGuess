@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,400..800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
-  <link rel="stylesheet" href="css/styles.css?v=7">
+  <link rel="stylesheet" href="css/styles.css?v=8">
 </head>
 <body>
   <header class="encabezado">
@@ -35,6 +35,15 @@
             <label for="apellido">Apellido</label>
             <input id="apellido" name="apellido" type="text" autocomplete="family-name" autocapitalize="words" maxlength="30" required placeholder="Ej. Pérez">
           </div>
+        </div>
+        <button class="enlace-discreto" type="button" id="btn-apodo" aria-expanded="false" aria-controls="campo-apodo">¿Quieres agregar tu apodo?</button>
+        <div class="campo-apodo" id="campo-apodo" hidden>
+          <div class="opcion-cabecera">
+            <label for="apodo">Apodo (opcional)</label>
+            <button class="btn-mini" type="button" id="btn-quitar-apodo">Quitar</button>
+          </div>
+          <input id="apodo" name="apodo" type="text" autocomplete="nickname" maxlength="25" placeholder="Ej. Juancho">
+          <p class="nota">En el mapa y en la lista se verá tu apodo en lugar de tu nombre.</p>
         </div>
         <p class="error" id="error-nombre" role="alert"></p>
         <button class="btn btn-principal" type="submit">Continuar</button>
@@ -115,8 +124,8 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-  <script src="js/config.js?v=7"></script>
-  <script src="js/app.js?v=7"></script>
+  <script src="js/config.js?v=8"></script>
+  <script src="js/app.js?v=8"></script>
   <script>
     // Si js/app.js no llegó a ejecutarse (archivo faltante en GitHub), avisa en vez de quedarse cargando.
     setTimeout(function () {

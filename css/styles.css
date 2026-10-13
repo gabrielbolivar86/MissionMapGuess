@@ -89,6 +89,16 @@ input[type="text"]:focus { border-color: var(--azul); box-shadow: 0 0 0 3px rgba
   .campos-nombre > div { flex: 1 1 0; min-width: 0; margin-bottom: 0; margin-right: 14px; }
   .campos-nombre > div:last-child { margin-right: 0; }
 }
+.enlace-discreto {
+  display: inline-block; margin-top: 12px; padding: 4px 0;
+  font: inherit; font-size: .88rem; color: var(--tinta-suave);
+  background: none; border: 0; cursor: pointer;
+  text-decoration: underline; text-decoration-color: var(--linea); text-underline-offset: 3px;
+}
+.enlace-discreto:hover { color: var(--azul); text-decoration-color: currentColor; }
+.campo-apodo { margin-top: 18px; }
+.nota { margin: 6px 0 0; font-size: .85rem; color: var(--tinta-suave); }
+.nombre-real { font-weight: 400; font-size: .85rem; color: var(--tinta-suave); }
 .error { color: var(--error); min-height: 1.3em; margin: 8px 0; font-size: .92rem; }
 
 .btn {
