@@ -21,6 +21,7 @@ const HOJA_CONFIG = 'Config';
 const CACHE_KEY = 'lista_v1';
 const CACHE_SEG = 15;
 const ESTADOS = ['abierta', 'solo_kiosko', 'cerrada', 'revelado'];
+const MAX_POR_PERSONA = 2;
 
 function configurar() {
   const ss = SpreadsheetApp.getActive();
@@ -110,7 +111,7 @@ function doPost(e) {
   if (nombre.length < 3) return json_({ ok: false, error: 'Escribe tu nombre y apellido.' });
 
   const misiones = (Array.isArray(datos.misiones) ? datos.misiones : [])
-    .slice(0, 3)
+    .slice(0, MAX_POR_PERSONA)
     .map(function (x) { return { id: parseInt(x.id, 10), n: limpiar_(x.n).slice(0, 80) }; })
     .filter(function (x) { return x.id > 0 && x.id < 10000; });
   if (!misiones.length) return json_({ ok: false, error: 'Elige al menos una misión.' });
@@ -118,7 +119,6 @@ function doPost(e) {
   const ahora = new Date();
   const origen = esKiosko ? 'kiosko' : 'en línea';
   const disp = limpiar_(datos.dispositivo).slice(0, 40);
-  const filas = misiones.map(function (x) { return [ahora, nombre, x.id, x.n, origen, disp]; });
 
   const lock = LockService.getScriptLock();
   try {
@@ -126,8 +126,29 @@ function doPost(e) {
   } catch (err) {
     return json_({ ok: false, error: 'Hay mucha gente votando. Intenta de nuevo en unos segundos.' });
   }
+  let filas;
   try {
     const hoja = SpreadsheetApp.getActive().getSheetByName(HOJA_PRED);
+    // Límite de predicciones por persona (se compara el nombre sin tildes ni mayúsculas)
+    const clave = normalizar_(nombre);
+    const previas = [];
+    if (hoja.getLastRow() > 1) {
+      hoja.getRange(2, 2, hoja.getLastRow() - 1, 2).getValues().forEach(function (r) {
+        const id = Number(r[1]);
+        if (normalizar_(r[0]) === clave && previas.indexOf(id) < 0) previas.push(id);
+      });
+    }
+    if (previas.length >= MAX_POR_PERSONA) {
+      return json_({ ok: false, error: 'Ya hiciste tus ' + MAX_POR_PERSONA + ' predicciones.' });
+    }
+    const nuevas = misiones.filter(function (x, i) {
+      return previas.indexOf(x.id) < 0 && misiones.findIndex(function (y) { return y.id === x.id; }) === i;
+    });
+    if (!nuevas.length) return json_({ ok: false, error: 'Ya habías elegido esa misión.' });
+    if (previas.length + nuevas.length > MAX_POR_PERSONA) {
+      return json_({ ok: false, error: 'Solo te queda ' + (MAX_POR_PERSONA - previas.length) + ' predicción.' });
+    }
+    filas = nuevas.map(function (x) { return [ahora, nombre, x.id, x.n, origen, disp]; });
     hoja.getRange(hoja.getLastRow() + 1, 1, filas.length, filas[0].length).setValues(filas);
     SpreadsheetApp.flush();
   } finally {
@@ -187,6 +208,12 @@ function escribirConfig_(cambios) {
     if (fila === -1) hoja.appendRow([clave, cambios[clave]]);
     else hoja.getRange(fila, 2).setValue(cambios[clave]);
   });
+}
+
+/** Nombre comparable: sin tildes, sin mayúsculas, sin espacios extra. */
+function normalizar_(v) {
+  return String(v == null ? '' : v).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 /** Quita espacios extra y evita que un texto se interprete como fórmula. */

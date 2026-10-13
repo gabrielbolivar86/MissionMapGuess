@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,400..800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
-  <link rel="stylesheet" href="css/styles.css?v=5">
+  <link rel="stylesheet" href="css/styles.css?v=6">
 </head>
 <body>
   <header class="encabezado">
@@ -29,11 +29,11 @@
         <div class="campos-nombre">
           <div>
             <label for="nombre">Nombre</label>
-            <input id="nombre" name="nombre" type="text" autocomplete="given-name" autocapitalize="words" maxlength="30" required placeholder="Ej. María">
+            <input id="nombre" name="nombre" type="text" autocomplete="given-name" autocapitalize="words" maxlength="30" required placeholder="Ej. Juan">
           </div>
           <div>
             <label for="apellido">Apellido</label>
-            <input id="apellido" name="apellido" type="text" autocomplete="family-name" autocapitalize="words" maxlength="30" required placeholder="Ej. Quispe">
+            <input id="apellido" name="apellido" type="text" autocomplete="family-name" autocapitalize="words" maxlength="30" required placeholder="Ej. Pérez">
           </div>
         </div>
         <p class="error" id="error-nombre" role="alert"></p>
@@ -44,7 +44,7 @@
     <!-- Paso 2: misiones -->
     <section class="paso" id="paso-mision" hidden>
       <h1 id="titulo-mision">¿A qué misión crees que irá?</h1>
-      <p class="ayuda">Escribe una ciudad o país y elige de la lista. Puedes poner hasta 3 opciones; para el premio cuentan tus 2 primeras predicciones.</p>
+      <p class="ayuda" id="ayuda-mision">Escribe una ciudad o país y elige de la lista. Cada persona puede elegir hasta 2 misiones.</p>
       <form id="form-mision" novalidate>
         <ol class="opciones" id="opciones"></ol>
         <button class="btn btn-enlace" type="button" id="btn-agregar-opcion">+ Agregar otra opción</button>
@@ -58,7 +58,16 @@
     <!-- Vista: mapa + lista -->
     <section class="vista-mapa" id="vista-mapa" hidden>
       <div class="mapa" id="mapa" role="region" aria-label="Mapa de predicciones"></div>
-      <aside class="panel">
+      <aside class="panel" id="panel">
+        <div class="barra-hoja">
+          <button class="btn-hoja" id="btn-hoja" type="button" aria-expanded="false" aria-controls="hoja-contenido">
+            <span class="asa" aria-hidden="true"></span>
+            <span class="hoja-titulo" id="hoja-titulo">Ver predicciones</span>
+            <span class="hoja-sub" id="hoja-sub"></span>
+          </button>
+          <button class="btn btn-principal btn-barra" id="btn-barra-accion" type="button" hidden></button>
+        </div>
+        <div class="hoja-contenido" id="hoja-contenido">
         <section class="control" id="control" hidden>
           <h2>Panel de control</h2>
           <p class="estado-actual">Votación: <strong id="estado-actual"></strong></p>
@@ -94,6 +103,7 @@
           </div>
           <ul class="personas" id="personas"></ul>
         </section>
+        </div>
       </aside>
     </section>
 
@@ -103,8 +113,8 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-  <script src="js/config.js?v=5"></script>
-  <script src="js/app.js?v=5"></script>
+  <script src="js/config.js?v=6"></script>
+  <script src="js/app.js?v=6"></script>
   <script>
     // Si js/app.js no llegó a ejecutarse (archivo faltante en GitHub), avisa en vez de quedarse cargando.
     setTimeout(function () {

@@ -70,7 +70,8 @@ y después de cada voto muestra **Siguiente persona**. Para quitarlo, abre la p�
 
 ## Reglas del ranking
 
-- Cada persona puede guardar varias predicciones; cuentan sus **2 primeras** (por hora de envío).
+- Cada persona puede hacer **máximo 2 predicciones** (juntas o una y luego otra). Apps Script lo valida
+  por nombre y apellido, así que no se puede saltar el límite.
 - Se toma la más cercana a la misión real (distancia en línea recta en km).
 - Acertar la misión exacta = 0 km. Empates: gana quien votó primero.
 - Las personas se identifican por su nombre y apellido (sin importar tildes ni mayúsculas).

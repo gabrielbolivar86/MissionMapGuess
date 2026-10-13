@@ -3,8 +3,9 @@
   window.__appIniciada = true;
 
   const CFG = window.APP_CONFIG || {};
-  const MAX_OPCIONES = 3;
-  const CUENTAN = 2; // predicciones por persona que cuentan para el premio
+  const MAX_POR_PERSONA = 2; // predicciones que puede hacer cada persona (y las que cuentan)
+  const CUENTAN = MAX_POR_PERSONA;
+  const esCelular = () => window.matchMedia("(max-width: 899px)").matches;
 
   // ---------- Utilidades ----------
   const $ = (id) => document.getElementById(id);
@@ -111,6 +112,11 @@
       if (estado === "cerrada" || estado === "revelado") return Promise.resolve({ ok: false, error: "La votación ya está cerrada." });
       if (estado === "solo_kiosko" && !p.kiosko) return Promise.resolve({ ok: false, error: "La votación en línea ya cerró. Ahora solo se vota en la reunión." });
       const lista = demo.leer();
+      const previas = [...new Set(lista.filter((x) => norm(x.n) === norm(p.nombre)).map((x) => x.m))];
+      const nuevas = p.misiones.filter((m) => !previas.includes(m.id));
+      if (previas.length >= MAX_POR_PERSONA) return Promise.resolve({ ok: false, error: `Ya hiciste tus ${MAX_POR_PERSONA} predicciones.` });
+      if (previas.length + nuevas.length > MAX_POR_PERSONA) return Promise.resolve({ ok: false, error: `Solo te queda ${MAX_POR_PERSONA - previas.length} predicción.` });
+      p.misiones = nuevas;
       const f = Date.now();
       p.misiones.forEach((m) => lista.push({ f, n: p.nombre, m: m.id }));
       store.set("demo_pred", JSON.stringify(lista));
@@ -127,10 +133,12 @@
   // ---------- Navegación entre pantallas ----------
   function mostrar(id) {
     ["paso-nombre", "paso-mision", "vista-mapa", "cargando"].forEach((x) => { $(x).hidden = x !== id; });
+    document.body.classList.toggle("en-mapa", id === "vista-mapa");
+    if (id !== "vista-mapa") abrirHoja(false);
     window.scrollTo(0, 0);
     if (id === "vista-mapa") {
       iniciarMapa();
-      setTimeout(() => { mapa.invalidateSize(); centrarEnReal(); }, 50);
+      setTimeout(() => { mapa.invalidateSize(); centrarEnReal(); revisarRevelado(); }, 50);
       programarRefresco();
     } else {
       clearInterval(refrescoTimer);
@@ -163,6 +171,16 @@
     $("error-nombre").textContent = "";
     nombre = n + " " + a;
     if (!KIOSKO) { store.set("nombre", nombre); store.set("nombre_n", n); store.set("nombre_a", a); }
+    if (restantesDe(nombre) <= 0) {
+      if (KIOSKO) {
+        $("error-nombre").textContent = `${nombre} ya hizo sus ${MAX_POR_PERSONA} predicciones.`;
+        nombre = "";
+        return;
+      }
+      toast(`Ya hiciste tus ${MAX_POR_PERSONA} predicciones.`);
+      mostrar("vista-mapa");
+      return;
+    }
     abrirFormularioMision();
   });
 
@@ -173,8 +191,30 @@
   });
 
   // ---------- Paso 2: misiones ----------
+  // Misiones (sin repetir) que ya eligió una persona, en orden de envío
+  function prediccionesDe(n) {
+    const k = norm(n);
+    const ids = [];
+    [...datos.predicciones].sort((a, b) => a.f - b.f).forEach((p) => {
+      if (norm(p.n) === k && !ids.includes(p.m)) ids.push(p.m);
+    });
+    return ids;
+  }
+  const restantesDe = (n) => Math.max(0, MAX_POR_PERSONA - prediccionesDe(n).length);
+  let maxOpciones = MAX_POR_PERSONA;
+
   function abrirFormularioMision(preseleccion) {
+    const ya = prediccionesDe(nombre);
+    maxOpciones = MAX_POR_PERSONA - ya.length;
+    if (maxOpciones <= 0) {
+      toast(`Ya hiciste tus ${MAX_POR_PERSONA} predicciones.`);
+      return mostrar("vista-mapa");
+    }
+    if (preseleccion && ya.includes(preseleccion)) preseleccion = null;
     elegidas = [preseleccion ? { id: preseleccion } : null];
+    $("ayuda-mision").textContent = ya.length
+      ? `Ya elegiste ${POR_ID.get(ya[0]) ? POR_ID.get(ya[0]).n : "una misión"}. Te queda 1 predicción más.`
+      : `Escribe una ciudad o país y elige de la lista. Cada persona puede elegir hasta ${MAX_POR_PERSONA} misiones.`;
     $("quien-nombre").textContent = nombre;
     $("error-mision").textContent = "";
     pintarOpciones();
@@ -191,7 +231,7 @@
     elegidas.forEach((sel, i) => {
       const li = document.createElement("li");
       li.className = "opcion";
-      const etiqueta = i === 0 ? "Tu predicción" : "Opción " + (i + 1);
+      const etiqueta = maxOpciones < MAX_POR_PERSONA ? "Tu segunda predicción" : i === 0 ? "Tu predicción" : "Segunda opción";
       const quitar = i > 0 ? `<button type="button" class="btn-mini" data-quitar="${i}">Quitar</button>` : "";
       if (sel) {
         const m = POR_ID.get(sel.id);
@@ -210,7 +250,7 @@
       }
       ol.appendChild(li);
     });
-    $("btn-agregar-opcion").hidden = elegidas.length >= MAX_OPCIONES;
+    $("btn-agregar-opcion").hidden = elegidas.length >= maxOpciones;
   }
 
   $("opciones").addEventListener("click", (e) => {
@@ -225,7 +265,7 @@
   });
 
   $("btn-agregar-opcion").addEventListener("click", () => {
-    if (elegidas.length >= MAX_OPCIONES) return;
+    if (elegidas.length >= maxOpciones) return;
     elegidas.push(null);
     pintarOpciones();
     const inp = $("op-" + (elegidas.length - 1));
@@ -247,6 +287,10 @@
   }
 
   function elegirOpcion(i, m) {
+    if (prediccionesDe(nombre).includes(m.id)) {
+      $("error-mision").textContent = "Ya habías elegido esa misión antes.";
+      return;
+    }
     if (elegidas.some((x, j) => j !== i && x && x.id === m.id)) {
       $("error-mision").textContent = "Ya elegiste esa misión en otra opción.";
       return;
@@ -346,12 +390,15 @@
     for (const m of MISIONES) {
       L.circleMarker([m.lat, m.lng], {
         renderer: lienzo, interactive: false, radius: tactil ? 4.5 : 3.5, weight: 1,
-        color: "#5A6580", fillColor: "#FFFFFF", fillOpacity: 1,
+        color: "#005B94", fillColor: "#FFFFFF", fillOpacity: 1,
       }).addTo(capaBase);
     }
     capaPredicciones = L.layerGroup().addTo(mapa);
 
+    // Tocar o mover el mapa cierra la lista de predicciones en celular
+    mapa.on("dragstart", () => abrirHoja(false));
     mapa.on("click", (e) => {
+      abrirHoja(false);
       const cerca = misionesCerca(e.containerPoint, RADIO_TOQUE);
       if (!cerca.length) return;
       // Una sola, o una claramente más cerca que las demás: se abre directo
@@ -414,14 +461,16 @@
 
   function popupHtml(id) {
     const m = POR_ID.get(id);
-    const quienes = datos.predicciones.filter((p) => p.m === id).map((p) => p.n);
+    const quienes = prediccionesQueCuentan().filter((p) => p.m === id).map((p) => p.n);
     const unicos = [...new Set(quienes)];
+    const ya = nombre ? prediccionesDe(nombre) : [];
+    const puedeElegir = puedeVotar() && (!nombre || (ya.length < MAX_POR_PERSONA && !ya.includes(id)));
     let html = `<strong>${esc(m.n)}</strong><br><span>${esc(m.p)}</span>`;
     if (datos.mision_real_id === id) html += `<br><b>Esta es la misión real</b>`;
     html += unicos.length
       ? `<ul>${unicos.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>`
       : `<br><em>Nadie la eligió todavía.</em>`;
-    if (puedeVotar()) html += `<button class="popup-btn" type="button" data-votar="${id}">Elegir esta misión</button>`;
+    if (puedeElegir) html += `<button class="popup-btn" type="button" data-votar="${id}">Elegir esta misión</button>`;
     return html;
   }
 
@@ -447,7 +496,7 @@
     if (!mapa) return;
     capaPredicciones.clearLayers();
     const grupos = new Map();
-    for (const p of datos.predicciones) {
+    for (const p of prediccionesQueCuentan()) {
       if (!POR_ID.has(p.m)) continue;
       if (!grupos.has(p.m)) grupos.set(p.m, new Set());
       grupos.get(p.m).add(p.n);
@@ -483,6 +532,24 @@
     mapa.setView([m.lat, m.lng], 5);
     setTimeout(() => abrirPopupMision(id), 300);
   }
+
+  // Solo las primeras predicciones de cada persona (las que cuentan) se muestran en el mapa
+  function prediccionesQueCuentan() {
+    return agruparPorPersona().flatMap((per) => per.preds.slice(0, CUENTAN));
+  }
+
+  // ---------- Hoja deslizable (celular) ----------
+  function abrirHoja(abrir) {
+    const panel = $("panel");
+    if (!panel) return;
+    panel.classList.toggle("abierta", !!abrir);
+    $("btn-hoja").setAttribute("aria-expanded", String(!!abrir));
+  }
+  $("btn-hoja").addEventListener("click", () => abrirHoja(!$("panel").classList.contains("abierta")));
+  $("btn-barra-accion").addEventListener("click", () => {
+    if (KIOSKO) { nombre = ""; }
+    irAPrimerPaso();
+  });
 
   // ---------- Panel: personas, ranking, avisos ----------
   function agruparPorPersona() {
@@ -520,8 +587,23 @@
     if (datos.estado === "cerrada") { aviso.hidden = false; aviso.classList.add("cerrado"); aviso.textContent = "La votación está cerrada. ¡Pronto sabremos la misión!"; }
     if (datos.estado === "revelado") { aviso.hidden = false; aviso.textContent = "¡Ya se abrió la carta! Mira el ranking."; }
 
-    $("btn-nueva").hidden = !puedeVotar() || !!KIOSKO;
+    const hechas = nombre ? prediccionesDe(nombre).length : 0;
+    const puedeAgregar = puedeVotar() && !KIOSKO && hechas < MAX_POR_PERSONA;
+    $("btn-nueva").hidden = !puedeAgregar;
+    $("btn-nueva").textContent = hechas ? "Agregar mi segunda predicción" : "Hacer mi predicción";
     $("btn-siguiente").hidden = !puedeVotar() || !KIOSKO;
+
+    // Barra inferior (celular)
+    const accion = $("btn-barra-accion");
+    accion.hidden = !(puedeAgregar || (KIOSKO && puedeVotar()));
+    accion.textContent = KIOSKO ? "Siguiente persona" : hechas ? "Agregar otra" : "Votar";
+    const total = personas.reduce((t, per) => t + Math.min(per.preds.length, CUENTAN), 0);
+    $("hoja-titulo").textContent = datos.estado === "revelado" ? "Ver ranking" : KIOSKO ? "Panel y lista" : "Ver predicciones";
+    let sub = personas.length
+      ? `${personas.length} ${personas.length === 1 ? "persona" : "personas"}, ${total} ${total === 1 ? "predicción" : "predicciones"}`
+      : "Todavía no hay predicciones";
+    if (datos.estado === "cerrada" || (datos.estado === "solo_kiosko" && !KIOSKO)) sub = "Votación cerrada. " + sub;
+    $("hoja-sub").textContent = sub;
     pintarRanking(personas);
     pintarControl();
   }
@@ -628,19 +710,21 @@
     });
     $("kiosko-chip").addEventListener("click", () => {
       mostrar("vista-mapa");
-      setTimeout(() => $("control").scrollIntoView({ behavior: "smooth", block: "start" }), 80);
+      if (esCelular()) { abrirHoja(true); $("hoja-contenido").scrollTop = 0; }
+      else setTimeout(() => $("control").scrollIntoView({ behavior: "smooth", block: "start" }), 80);
     });
   }
 
   $("personas").addEventListener("click", (e) => {
     const b = e.target.closest("[data-ir]");
-    if (b) { enfocarMision(Number(b.dataset.ir)); window.scrollTo({ top: 0, behavior: "smooth" }); }
+    if (b) { abrirHoja(false); enfocarMision(Number(b.dataset.ir)); }
   });
   $("btn-nueva").addEventListener("click", irAPrimerPaso);
   $("btn-siguiente").addEventListener("click", () => { nombre = ""; irAPrimerPaso(); });
   $("btn-actualizar").addEventListener("click", async () => { await cargarPredicciones(); toast("Lista actualizada"); });
 
   // ---------- Carga de datos ----------
+  let estadoAnterior = null;
   async function cargarPredicciones() {
     try {
       const r = await api.listar();
@@ -653,6 +737,17 @@
     pintarMapa();
     pintarPanel();
     centrarEnReal();
+    revisarRevelado();
+  }
+
+  // Al revelarse la misión, en celular se abre la lista para mostrar el ranking (una sola vez)
+  function revisarRevelado() {
+    if ($("vista-mapa").hidden) return;
+    if (datos.estado === "revelado" && estadoAnterior !== "revelado" && esCelular()) {
+      abrirHoja(true);
+      $("hoja-contenido").scrollTop = 0;
+    }
+    estadoAnterior = datos.estado;
   }
 
   function programarRefresco() {
