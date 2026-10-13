@@ -233,7 +233,39 @@ input[type="text"]:focus { border-color: var(--azul); box-shadow: 0 0 0 3px rgba
 .persona li.extra { color: var(--tinta-suave); }
 .etiqueta { font-size: .78rem; color: var(--tinta-suave); margin-left: 4px; }
 
+/* Tarjeta de la misión revelada */
+.revelacion {
+  background: var(--navy); color: var(--blanco);
+  border-radius: 14px; padding: 18px 18px 16px; margin: 4px 0 16px;
+  box-shadow: inset 0 -5px 0 var(--celeste);
+}
+.revelacion p { margin: 0; }
+.revelacion-quien { font-size: .95rem; color: #9FD8F0; }
+.revelacion-mision {
+  font-size: clamp(1.6rem, 6.5vw, 2rem); line-height: 1.1; font-weight: 800;
+  font-variation-settings: "wdth" 90; margin: 4px 0 2px !important; letter-spacing: -.01em;
+}
+.revelacion-pais { font-size: .95rem; opacity: .85; }
+.revelacion-datos { display: flex; flex-wrap: wrap; gap: 10px 22px; margin: 14px 0 4px; }
+.revelacion-datos:empty { display: none; }
+.revelacion-datos div { min-width: 0; }
+.revelacion-datos dt { font-size: .78rem; color: #9FD8F0; }
+.revelacion-datos dd { margin: 2px 0 0; font-size: 1.1rem; font-weight: 700; }
+
+/* Fecha e idioma en el panel */
+.datos-llamamiento { display: flex; gap: 12px; margin-top: 4px; }
+.datos-llamamiento > div { flex: 1 1 0; min-width: 0; }
+.datos-llamamiento input {
+  width: 100%; font: inherit; font-size: 1rem; color: var(--tinta);
+  padding: 11px 12px; border: 1.5px solid var(--linea); border-radius: var(--radio); background: var(--blanco);
+}
+.control .nota { margin-bottom: 10px; }
+.btn-secundario { background: var(--fondo-2); color: var(--navy); margin-bottom: 10px; }
+.btn-secundario:hover { background: var(--linea); }
+
 /* Ranking */
+.ranking-lista li[data-linea] { cursor: pointer; }
+.ranking-lista li.activa { background: var(--fondo-2); }
 .ranking-lista { list-style: none; padding: 0; margin: 0; }
 .ranking-lista li {
   display: grid; grid-template-columns: 2.2em 1fr auto; gap: 8px; align-items: baseline;

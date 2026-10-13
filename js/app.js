@@ -49,10 +49,10 @@
   // ---------- Estado ----------
   let MISIONES = [];
   let POR_ID = new Map();
-  let datos = { estado: "abierta", mision_real_id: null, predicciones: [] };
+  let datos = { estado: "abierta", mision_real_id: null, fecha: "", idioma: "", predicciones: [] };
   let nombre = "";
   let elegidas = []; // [{id} | null] por cada campo de opción
-  let mapa, capaPredicciones, capaBase;
+  let mapa, capaPredicciones, capaBase, capaLineas;
   let refrescoTimer;
 
   // Modo kiosko: se activa abriendo la página con ?kiosko=CLAVE (queda guardado en ese navegador)
@@ -98,6 +98,8 @@
       return Promise.resolve({
         ok: true, estado,
         mision_real_id: estado === "revelado" ? Number(store.get("demo_real") || params.get("real")) || 366 : null,
+        fecha: estado === "revelado" ? store.get("demo_fecha") || "" : "",
+        idioma: estado === "revelado" ? store.get("demo_idioma") || "" : "",
         predicciones: demo.leer(),
       });
     },
@@ -106,7 +108,9 @@
       if (p.mision_real_id !== undefined) store.set("demo_real", String(p.mision_real_id));
       if (p.estado === "revelado" && !store.get("demo_real")) return Promise.resolve({ ok: false, error: "Primero elige la misión real." });
       if (p.estado) store.set("demo_estado", p.estado);
-      return demo.listar();
+      if (p.fecha !== undefined) store.set("demo_fecha", p.fecha);
+      if (p.idioma !== undefined) store.set("demo_idioma", p.idioma);
+      return demo.listar().then((r) => ({ ...r, fecha: store.get("demo_fecha") || "", idioma: store.get("demo_idioma") || "" }));
     },
     guardar(p) {
       const estado = demo.estado();
@@ -460,6 +464,7 @@
         color: "#005B94", fillColor: "#FFFFFF", fillOpacity: 1,
       }).addTo(capaBase);
     }
+    capaLineas = L.layerGroup().addTo(mapa);
     capaPredicciones = L.layerGroup().addTo(mapa);
 
     // Tocar o mover el mapa cierra la lista de predicciones en celular
@@ -561,6 +566,7 @@
 
   function pintarMapa() {
     if (!mapa) return;
+    pintarLineas();
     capaPredicciones.clearLayers();
     const grupos = new Map();
     for (const p of prediccionesVisibles()) {
@@ -658,7 +664,6 @@
     if (DEMO) { aviso.hidden = false; aviso.textContent = "Modo demo: las predicciones se guardan solo en este navegador. Pon la URL de Apps Script en js/config.js para compartirlas."; }
     if (datos.estado === "solo_kiosko" && !KIOSKO) { aviso.hidden = false; aviso.classList.add("cerrado"); aviso.textContent = "La votación en línea ya cerró. Ahora solo se vota en la reunión. Puedes seguir viendo el mapa."; }
     if (datos.estado === "cerrada") { aviso.hidden = false; aviso.classList.add("cerrado"); aviso.textContent = "La votación está cerrada. ¡Pronto sabremos la misión!"; }
-    if (datos.estado === "revelado") { aviso.hidden = false; aviso.textContent = "¡Ya se abrió la carta! Mira el ranking."; }
 
     const hechas = nombre ? prediccionesDe(nombre).length : 0;
     const puedeAgregar = puedeVotar() && !KIOSKO && hechas < MAX_POR_PERSONA;
@@ -678,16 +683,15 @@
       ? `${personas.length} ${personas.length === 1 ? "persona" : "personas"}, ${total} ${total === 1 ? "predicción" : "predicciones"}`
       : "Todavía no hay predicciones";
     if (datos.estado === "cerrada" || (datos.estado === "solo_kiosko" && !KIOSKO)) sub = "Votación cerrada. " + sub;
+    const realSub = datos.mision_real_id && POR_ID.get(datos.mision_real_id);
+    if (realSub) sub = `Irá a la Misión ${realSub.n}`;
     $("hoja-sub").textContent = sub;
     pintarRanking(personas);
     pintarControl();
   }
 
-  function pintarRanking(personas) {
-    const real = datos.mision_real_id && POR_ID.get(datos.mision_real_id);
-    $("ranking").hidden = !real;
-    if (!real) return;
-    $("ranking-mision").textContent = `La misión es ${real.n}. Para el premio cuenta solo la primera predicción de cada persona.`;
+  // Ranking: la primera predicción de cada persona, ordenada por distancia a la misión real
+  function calcularRanking(personas, real) {
     const filas = personas.map((per) => {
       let mejor = null;
       per.preds.slice(0, CUENTAN).forEach((p) => {
@@ -699,12 +703,89 @@
       return mejor && { nombre: per.visible, real: per.apodo ? per.nombre : "", ...mejor };
     }).filter(Boolean);
     filas.sort((a, b) => a.d - b.d || a.f - b.f);
-    $("ranking-lista").innerHTML = filas.map((r, i) => `<li>
+    return filas;
+  }
+
+  function pintarRanking(personas) {
+    const real = datos.mision_real_id && POR_ID.get(datos.mision_real_id);
+    $("ranking").hidden = !real;
+    pintarRevelacion(real);
+    if (!real) return;
+    $("ranking-mision").textContent = "Para el premio cuenta solo la primera predicción de cada persona. Toca un nombre para ver su línea en el mapa.";
+    const filas = calcularRanking(personas, real);
+    $("ranking-lista").innerHTML = filas.map((r, i) => `<li data-linea="${i}" tabindex="0">
         <span class="pos">${i + 1}.</span>
         <span>${esc(r.nombre)}${r.real && KIOSKO ? ` <span class="nombre-real">(${esc(r.real)})</span>` : ""}<small>${esc(r.m.n)}</small></span>
         <span class="km ${r.d === 0 ? "exacto" : ""}">${r.d === 0 ? "¡Exacto!" : Math.round(r.d).toLocaleString("es") + " km"}</span>
       </li>`).join("");
   }
+
+  function fechaLarga(iso) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso || "")) return "";
+    const [y, m, d] = iso.split("-").map(Number);
+    return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("es", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+  }
+
+  function pintarRevelacion(real) {
+    $("revelacion").hidden = !real;
+    if (!real) return;
+    const quien = (CFG.MISIONERO || "Nuestro misionero").split(" ")[0];
+    $("rev-quien").textContent = `¡${quien} irá a la`;
+    $("rev-mision").textContent = `Misión ${real.n}!`;
+    $("rev-pais").textContent = real.p;
+    const filas = [];
+    if (datos.fecha) filas.push(["Fecha de salida", fechaLarga(datos.fecha) || datos.fecha]);
+    if (datos.idioma) filas.push(["Idioma", datos.idioma]);
+    $("rev-datos").innerHTML = filas.map(([t, v]) => `<div><dt>${esc(t)}</dt><dd>${esc(v)}</dd></div>`).join("");
+  }
+
+  // Líneas del ranking: de la primera predicción de cada persona a la misión real
+  let lineas = [];
+  function pintarLineas() {
+    if (!capaLineas) return;
+    capaLineas.clearLayers();
+    lineas = [];
+    const real = datos.mision_real_id && POR_ID.get(datos.mision_real_id);
+    if (!real) return;
+    calcularRanking(agruparPorPersona(), real).forEach((r, i) => {
+      if (r.d === 0) { lineas.push(null); return; }
+      // Tomar el camino corto si la línea cruzaría medio mundo (p. ej. de Asia a América)
+      let lng = r.m.lng;
+      while (lng - real.lng > 180) lng -= 360;
+      while (real.lng - lng > 180) lng += 360;
+      const top = i < 3;
+      const linea = L.polyline([[r.m.lat, lng], [real.lat, real.lng]], {
+        color: top ? "#005B94" : "#4B5E70", weight: top ? 3 : 1.5,
+        opacity: top ? 0.9 : 0.55, dashArray: top ? null : "4 6",
+      }).bindTooltip(`${i + 1}. ${esc(r.nombre)}: ${Math.round(r.d).toLocaleString("es")} km`, { sticky: true })
+        .addTo(capaLineas);
+      linea.estilo = { color: linea.options.color, weight: linea.options.weight, opacity: linea.options.opacity, dashArray: linea.options.dashArray };
+      lineas.push(linea);
+    });
+  }
+
+  function resaltarLinea(i) {
+    document.querySelectorAll("#ranking-lista li").forEach((li) => li.classList.toggle("activa", Number(li.dataset.linea) === i));
+    lineas.forEach((l, j) => {
+      if (!l) return;
+      if (j === i) { l.setStyle({ color: "#00A3E0", weight: 5, opacity: 1, dashArray: null }); l.bringToFront(); }
+      else l.setStyle(l.estilo);
+    });
+    const l = lineas[i];
+    const real = datos.mision_real_id && POR_ID.get(datos.mision_real_id);
+    abrirHoja(false);
+    if (l) { mapa.fitBounds(l.getBounds(), { padding: [50, 50], maxZoom: 11 }); l.openTooltip(l.getCenter()); }
+    else if (real) mapa.setView([real.lat, real.lng], 6);
+  }
+
+  $("ranking-lista").addEventListener("click", (e) => {
+    const li = e.target.closest("li[data-linea]");
+    if (li) resaltarLinea(Number(li.dataset.linea));
+  });
+  $("ranking-lista").addEventListener("keydown", (e) => {
+    const li = e.target.closest("li[data-linea]");
+    if (li && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); resaltarLinea(Number(li.dataset.linea)); }
+  });
 
   // ---------- Panel de control (solo en el kiosko) ----------
   const ESTADO_TXT = {
@@ -749,6 +830,7 @@
       }
       datos.estado = r.estado;
       datos.mision_real_id = r.mision_real_id || null;
+      if (r.fecha !== undefined) { datos.fecha = datos.estado === "revelado" ? r.fecha : datos.fecha; ponerDatosControl(r); }
       realCentrada = false;
       toast(mensajeOk);
       await cargarPredicciones();
@@ -760,8 +842,20 @@
     }
   }
 
+  function ponerDatosControl(r) {
+    if (document.activeElement !== $("ctl-fecha")) $("ctl-fecha").value = r.fecha || "";
+    if (document.activeElement !== $("ctl-idioma")) $("ctl-idioma").value = r.idioma || "";
+  }
+  const datosControl = () => ({ fecha: $("ctl-fecha").value || "", idioma: $("ctl-idioma").value.trim() });
+
   function iniciarControl() {
     if (!KIOSKO) return;
+    // Al abrir: leer fecha e idioma guardados (y comprobar la clave desde el inicio)
+    api.admin({}).then((r) => {
+      if (r.ok) ponerDatosControl(r);
+      else $("error-control").textContent = r.error + (r.codigo === "clave" ? ` Esta computadora tiene guardada la clave "${KIOSKO}".` : "");
+    }).catch(() => {});
+    $("btn-guardar-datos").addEventListener("click", () => enviarControl(datosControl(), "Fecha e idioma guardados"));
     conectarBuscador($("real-buscar"), $("real-sug"), "real", (m) => {
       realElegida = m; pintarRealElegida(); pintarControl();
     });
@@ -785,7 +879,7 @@
     $("btn-revelar").addEventListener("click", () => {
       if (!realElegida) return;
       if (!window.confirm(`¿Revelar que la misión es ${realElegida.n}? Todos verán el ranking y la votación se cerrará.`)) return;
-      enviarControl({ estado: "revelado", mision_real_id: realElegida.id }, "¡Misión revelada!");
+      enviarControl({ estado: "revelado", mision_real_id: realElegida.id, ...datosControl() }, "¡Misión revelada!");
     });
     $("kiosko-chip").addEventListener("click", () => {
       mostrar("vista-mapa");
@@ -815,7 +909,7 @@
     try {
       const r = await api.listar();
       if (r && r.ok) {
-        datos = { estado: r.estado, mision_real_id: r.mision_real_id || null, predicciones: (r.predicciones || []).map((p) => ({ f: Number(p.f), n: String(p.n), m: Number(p.m), a: p.a ? String(p.a) : "" })) };
+        datos = { estado: r.estado, mision_real_id: r.mision_real_id || null, fecha: r.fecha || "", idioma: r.idioma || "", predicciones: (r.predicciones || []).map((p) => ({ f: Number(p.f), n: String(p.n), m: Number(p.m), a: p.a ? String(p.a) : "" })) };
       }
     } catch (err) {
       toast("No se pudo actualizar la lista. Revisa tu conexión.");

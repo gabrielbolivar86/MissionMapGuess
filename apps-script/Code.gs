@@ -121,6 +121,9 @@ function doGet(e) {
     ok: true,
     estado: cfg.estado,
     mision_real_id: cfg.estado === 'revelado' ? Number(cfg.mision_real_id) || null : null,
+    // La fecha y el idioma solo se muestran a todos después de revelar
+    fecha: cfg.estado === 'revelado' ? (cfg.fecha_salida || '') : '',
+    idioma: cfg.estado === 'revelado' ? (cfg.idioma || '') : '',
     predicciones: predicciones,
   });
   try { cache.put(CACHE_KEY, texto, CACHE_SEG); } catch (err) { /* >100KB: sin caché */ }
@@ -226,27 +229,37 @@ function admin_(d) {
     const id = parseInt(d.mision_real_id, 10);
     cambios.mision_real_id = id > 0 ? id : '';
   }
+  if (d.fecha !== undefined) {
+    const f = String(d.fecha || '').trim();
+    if (f && !/^\d{4}-\d{2}-\d{2}$/.test(f)) return json_({ ok: false, error: 'La fecha no es válida.' });
+    cambios.fecha_salida = f;
+  }
+  if (d.idioma !== undefined) cambios.idioma = limpiar_(d.idioma).slice(0, 40);
   const realFinal = cambios.mision_real_id !== undefined ? cambios.mision_real_id : Number(cfg.mision_real_id) || '';
   if (cambios.estado === 'revelado' && !realFinal) {
     return json_({ ok: false, error: 'Primero elige la misión real.' });
   }
 
-  const lock = LockService.getScriptLock();
-  try { lock.waitLock(25000); } catch (err) {
-    return json_({ ok: false, error: 'El servidor está ocupado. Intenta de nuevo en unos segundos.' });
+  if (Object.keys(cambios).length) {  // sin cambios = solo consultar (el kiosko lo usa al abrir el panel)
+    const lock = LockService.getScriptLock();
+    try { lock.waitLock(25000); } catch (err) {
+      return json_({ ok: false, error: 'El servidor está ocupado. Intenta de nuevo en unos segundos.' });
+    }
+    try {
+      escribirConfig_(cambios);
+      SpreadsheetApp.flush();
+    } finally {
+      lock.releaseLock();
+    }
+    CacheService.getScriptCache().remove(CACHE_KEY);
   }
-  try {
-    escribirConfig_(cambios);
-    SpreadsheetApp.flush();
-  } finally {
-    lock.releaseLock();
-  }
-  CacheService.getScriptCache().remove(CACHE_KEY);
-  const nuevo = leerConfig_();
+  const nuevo = Object.keys(cambios).length ? leerConfig_() : cfg;
   return json_({
     ok: true,
     estado: nuevo.estado,
     mision_real_id: nuevo.estado === 'revelado' ? Number(nuevo.mision_real_id) || null : null,
+    fecha: nuevo.fecha_salida || '',
+    idioma: nuevo.idioma || '',
   });
 }
 
@@ -258,8 +271,9 @@ function escribirConfig_(cambios) {
     for (let i = 1; i < valores.length; i++) {
       if (String(valores[i][0]).trim() === clave) { fila = i + 1; break; }
     }
-    if (fila === -1) hoja.appendRow([clave, cambios[clave]]);
-    else hoja.getRange(fila, 2).setValue(cambios[clave]);
+    if (fila === -1) { hoja.appendRow([clave]); fila = hoja.getLastRow(); }
+    // Como texto, para que Sheets no convierta fechas ni claves
+    hoja.getRange(fila, 2).setNumberFormat('@').setValue(String(cambios[clave]));
   });
 }
 

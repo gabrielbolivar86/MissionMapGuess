@@ -72,6 +72,16 @@ y después de cada voto muestra **Siguiente persona**. Para quitarlo, abre la p�
 **Ejecutar**. Crea una clave nueva (solo letras) en Config y la muestra en el registro. Luego abre en el kiosko
 la página con `?kiosko=` y esa clave nueva.
 
+## Revelar la misión
+
+En el panel de control del kiosko:
+1. (Opcional) Pon la **fecha de salida** y el **idioma** y toca "Guardar fecha e idioma". Nadie más los ve todavía.
+2. Elige la **misión real** y toca "Revelar misión y ranking" (también guarda la fecha y el idioma si los llenaste).
+
+Todos ven una tarjeta grande con la misión, la fecha y el idioma, el ranking, y en el mapa una línea desde
+la primera predicción de cada persona hasta la misión real (las 3 más cercanas, más marcadas).
+Al tocar un nombre del ranking se resalta su línea.
+
 ## Apodos
 
 Debajo del apellido hay un enlace discreto "¿Quieres agregar tu apodo?". Si alguien pone un apodo, en el mapa,

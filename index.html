@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,400..800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
-  <link rel="stylesheet" href="css/styles.css?v=8">
+  <link rel="stylesheet" href="css/styles.css?v=9">
 </head>
 <body>
   <header class="encabezado">
@@ -93,8 +93,26 @@
             <ul class="sugerencias" id="real-sug" role="listbox" hidden></ul>
           </div>
           <div class="elegida" id="real-elegida" hidden></div>
+          <div class="datos-llamamiento">
+            <div>
+              <label for="ctl-fecha">Fecha de salida</label>
+              <input type="date" id="ctl-fecha">
+            </div>
+            <div>
+              <label for="ctl-idioma">Idioma</label>
+              <input type="text" id="ctl-idioma" maxlength="40" placeholder="Ej. Inglés">
+            </div>
+          </div>
+          <p class="nota">La fecha y el idioma se muestran a todos cuando reveles la misión.</p>
+          <button class="btn btn-secundario" type="button" id="btn-guardar-datos">Guardar fecha e idioma</button>
           <button class="btn btn-principal" type="button" id="btn-revelar" disabled>Revelar misión y ranking</button>
           <p class="error" id="error-control" role="alert"></p>
+        </section>
+        <section class="revelacion" id="revelacion" hidden aria-live="polite">
+          <p class="revelacion-quien" id="rev-quien"></p>
+          <p class="revelacion-mision" id="rev-mision"></p>
+          <p class="revelacion-pais" id="rev-pais"></p>
+          <dl class="revelacion-datos" id="rev-datos"></dl>
         </section>
         <div class="aviso" id="aviso" hidden></div>
         <div class="acciones" id="acciones">
@@ -124,8 +142,8 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-  <script src="js/config.js?v=8"></script>
-  <script src="js/app.js?v=8"></script>
+  <script src="js/config.js?v=9"></script>
+  <script src="js/app.js?v=9"></script>
   <script>
     // Si js/app.js no llegó a ejecutarse (archivo faltante en GitHub), avisa en vez de quedarse cargando.
     setTimeout(function () {
