@@ -1,0 +1,73 @@
+# ¿A dónde irá? — Mapa de predicciones de misión
+
+Página para que familia y amigos adivinen a qué misión irá un futuro misionero.
+Las predicciones se guardan en una Google Sheet (vía Apps Script) y se ven como pines en un mapa.
+
+## Estructura
+
+```
+index.html            Página
+css/styles.css        Estilos (móvil y computadora)
+js/config.js          ← lo único que editas: URL de Apps Script y nombre del misionero
+js/app.js             Lógica (formulario, mapa, ranking)
+data/misiones.json    505 misiones con coordenadas (lo usa la página)
+data/misiones.csv     Lista base (sin coordenadas)
+data/misiones_geo.csv Lista con coordenadas (salida de geocodificar.py)
+apps-script/Code.gs   Backend para pegar en Apps Script
+geocodificar.py       Script que llenó las coordenadas (no hace falta volver a correrlo)
+```
+
+## Probar en tu computadora
+
+Con `API_URL` vacío en `js/config.js`, la página funciona en **modo demo** (guarda solo en tu navegador).
+
+```
+python -m http.server 8000
+```
+
+Abre http://localhost:8000. Para simular estados: `?estado=solo_kiosko`, `?estado=cerrada`,
+`?estado=revelado&real=366` (366 = Perú Lima Este).
+
+## 1. Google Sheet + Apps Script
+
+1. Crea una Google Sheet nueva.
+2. **Extensiones → Apps Script**. Borra lo que haya y pega `apps-script/Code.gs`. Guarda.
+3. Elige la función `configurar` y pulsa **Ejecutar**. Acepta los permisos.
+   Se crean las pestañas `Predicciones` y `Config`.
+4. **Implementar → Nueva implementación → Aplicación web**
+   - Ejecutar como: **Yo**
+   - Quién tiene acceso: **Cualquier persona**
+5. Copia la URL que termina en `/exec` y pégala en `API_URL` dentro de `js/config.js`.
+
+> Si cambias el código de Apps Script después, usa **Implementar → Gestionar implementaciones → Editar → Versión nueva**
+> para mantener la misma URL.
+
+## 2. Publicar en GitHub Pages
+
+1. Sube esta carpeta a un repositorio público en GitHub.
+2. **Settings → Pages → Source: Deploy from a branch → main / (root)**.
+3. En un par de minutos la página estará en `https://TU-USUARIO.github.io/NOMBRE-DEL-REPO/`.
+
+## Control durante el evento (pestaña Config)
+
+| estado        | Qué pasa |
+|---------------|----------|
+| `abierta`     | Cualquiera puede votar. |
+| `solo_kiosko` | Solo vota la computadora de la reunión. Los demás ven el mapa. |
+| `cerrada`     | Nadie vota. Todos ven el mapa. |
+| `revelado`    | Muestra el ranking. Antes pon el ID de la misión real en `mision_real_id`. |
+
+Los cambios se reflejan en la página en unos 15 segundos.
+
+**Computadora de la reunión (kiosko):** abre una vez la página con `?kiosko=CLAVE`
+(la clave está en `Config → clave_kiosko`). Ese navegador queda marcado: no recuerda nombres
+y después de cada voto muestra **Siguiente persona**. Para quitarlo, abre la página con `?kiosko=`.
+
+## Reglas del ranking
+
+- Cada persona puede guardar varias predicciones; cuentan sus **2 primeras** (por hora de envío).
+- Se toma la más cercana a la misión real (distancia en línea recta en km).
+- Acertar la misión exacta = 0 km. Empates: gana quien votó primero.
+- Las personas se identifican por su nombre y apellido (sin importar tildes ni mayúsculas).
+- Las misiones de una misma ciudad (p. ej. Lima Norte y Lima Este) están separadas unos km en el mapa
+  según su dirección, así que en el ranking se distinguen, pero la distancia entre ellas es aproximada.

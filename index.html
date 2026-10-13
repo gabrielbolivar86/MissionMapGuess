@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>¿A dónde irá?</title>
+  <meta name="description" content="Adivina a qué misión irá nuestro futuro misionero.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,400..800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="encabezado">
+    <div class="placa" aria-label="Placa de misionero">
+      <span class="placa-nombre" id="placa-nombre">ÉLDER</span>
+      <span class="placa-linea">¿A dónde irá?</span>
+    </div>
+    <span class="kiosko-chip" id="kiosko-chip" hidden>Computadora de la reunión</span>
+  </header>
+
+  <main>
+    <!-- Paso 1: nombre -->
+    <section class="paso" id="paso-nombre" hidden>
+      <h1>¿Quién eres?</h1>
+      <p class="ayuda">Así sabremos de quién es cada predicción.</p>
+      <form id="form-nombre" novalidate>
+        <label for="nombre">Nombre y apellido</label>
+        <input id="nombre" name="nombre" type="text" autocomplete="name" maxlength="60" required placeholder="Ej. María Quispe">
+        <p class="error" id="error-nombre" role="alert"></p>
+        <button class="btn btn-principal" type="submit">Continuar</button>
+      </form>
+    </section>
+
+    <!-- Paso 2: misiones -->
+    <section class="paso" id="paso-mision" hidden>
+      <h1 id="titulo-mision">¿A qué misión crees que irá?</h1>
+      <p class="ayuda">Escribe una ciudad o país y elige de la lista. Puedes poner hasta 3 opciones; para el premio cuentan tus 2 primeras predicciones.</p>
+      <form id="form-mision" novalidate>
+        <ol class="opciones" id="opciones"></ol>
+        <button class="btn btn-enlace" type="button" id="btn-agregar-opcion">+ Agregar otra opción</button>
+        <p class="error" id="error-mision" role="alert"></p>
+        <button class="btn btn-principal" type="submit" id="btn-guardar">Guardar mi predicción</button>
+        <button class="btn btn-enlace" type="button" id="btn-ver-mapa">Ver el mapa sin votar</button>
+      </form>
+      <p class="quien">Votando como <strong id="quien-nombre"></strong>. <button class="btn-mini" type="button" id="btn-cambiar-nombre">cambiar</button></p>
+    </section>
+
+    <!-- Vista: mapa + lista -->
+    <section class="vista-mapa" id="vista-mapa" hidden>
+      <div class="mapa" id="mapa" role="region" aria-label="Mapa de predicciones"></div>
+      <aside class="panel">
+        <div class="aviso" id="aviso" hidden></div>
+        <div class="acciones" id="acciones">
+          <button class="btn btn-principal" type="button" id="btn-nueva">Agregar otra predicción</button>
+          <button class="btn btn-principal" type="button" id="btn-siguiente" hidden>Siguiente persona</button>
+        </div>
+        <section id="ranking" hidden>
+          <h2>Ranking</h2>
+          <p class="ayuda" id="ranking-mision"></p>
+          <ol class="ranking-lista" id="ranking-lista"></ol>
+        </section>
+        <section>
+          <div class="lista-cabecera">
+            <h2>Predicciones <span class="cuenta" id="cuenta"></span></h2>
+            <button class="btn-mini" type="button" id="btn-actualizar">Actualizar</button>
+          </div>
+          <ul class="personas" id="personas"></ul>
+        </section>
+      </aside>
+    </section>
+
+    <div class="cargando" id="cargando">Cargando…</div>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="js/config.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
