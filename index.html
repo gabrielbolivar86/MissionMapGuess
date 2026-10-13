@@ -9,15 +9,15 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,400..800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
-  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/styles.css?v=5">
 </head>
 <body>
   <header class="encabezado">
-    <div class="placa" aria-label="Placa de misionero">
+    <a class="placa" href="./" title="Ir al inicio" aria-label="Ir al inicio">
       <span class="placa-nombre" id="placa-nombre">ÉLDER</span>
       <span class="placa-linea">¿A dónde irá?</span>
-    </div>
-    <span class="kiosko-chip" id="kiosko-chip" hidden>Computadora de la reunión</span>
+    </a>
+    <button class="kiosko-chip" id="kiosko-chip" type="button" hidden>Panel de control</button>
   </header>
 
   <main>
@@ -59,6 +59,24 @@
     <section class="vista-mapa" id="vista-mapa" hidden>
       <div class="mapa" id="mapa" role="region" aria-label="Mapa de predicciones"></div>
       <aside class="panel">
+        <section class="control" id="control" hidden>
+          <h2>Panel de control</h2>
+          <p class="estado-actual">Votación: <strong id="estado-actual"></strong></p>
+          <div class="botones-estado" role="group" aria-label="Estado de la votación">
+            <button type="button" class="btn-estado" data-estado="abierta">Abrir para todos</button>
+            <button type="button" class="btn-estado" data-estado="solo_kiosko">Solo esta computadora</button>
+            <button type="button" class="btn-estado" data-estado="cerrada">Cerrar votación</button>
+          </div>
+          <label for="real-buscar">Misión real</label>
+          <div class="buscador">
+            <input type="text" id="real-buscar" autocomplete="off" placeholder="Escribe la misión del llamamiento"
+              role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="real-sug">
+            <ul class="sugerencias" id="real-sug" role="listbox" hidden></ul>
+          </div>
+          <div class="elegida" id="real-elegida" hidden></div>
+          <button class="btn btn-principal" type="button" id="btn-revelar" disabled>Revelar misión y ranking</button>
+          <p class="error" id="error-control" role="alert"></p>
+        </section>
         <div class="aviso" id="aviso" hidden></div>
         <div class="acciones" id="acciones">
           <button class="btn btn-principal" type="button" id="btn-nueva">Agregar otra predicción</button>
@@ -85,7 +103,16 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-  <script src="js/config.js"></script>
-  <script src="js/app.js"></script>
+  <script src="js/config.js?v=5"></script>
+  <script src="js/app.js?v=5"></script>
+  <script>
+    // Si js/app.js no llegó a ejecutarse (archivo faltante en GitHub), avisa en vez de quedarse cargando.
+    setTimeout(function () {
+      var c = document.getElementById("cargando");
+      if (c && !c.hidden && !window.__appIniciada) {
+        c.textContent = "La página no terminó de cargar. Falta algún archivo (js/app.js, js/config.js o Leaflet). Recarga o avisa al organizador.";
+      }
+    }, 12000);
+  </script>
 </body>
 </html>

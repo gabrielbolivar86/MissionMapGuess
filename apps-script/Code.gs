@@ -95,6 +95,8 @@ function doPost(e) {
     return json_({ ok: false, error: 'Datos inválidos.' });
   }
 
+  if (datos.accion === 'admin') return admin_(datos);
+
   const cfg = leerConfig_();
   const esKiosko = !!datos.kiosko && datos.kiosko === cfg.clave_kiosko;
   if (cfg.estado === 'cerrada' || cfg.estado === 'revelado') {
@@ -133,6 +135,58 @@ function doPost(e) {
   }
   CacheService.getScriptCache().remove(CACHE_KEY);
   return json_({ ok: true, guardadas: filas.length });
+}
+
+/** Panel de control del kiosko: cambia el estado y/o la misión real. Requiere la clave del kiosko. */
+function admin_(d) {
+  const cfg = leerConfig_();
+  if (!d.kiosko || d.kiosko !== cfg.clave_kiosko) {
+    return json_({ ok: false, error: 'Esta computadora no tiene permiso para controlar la votación.' });
+  }
+  const cambios = {};
+  if (d.estado !== undefined) {
+    if (ESTADOS.indexOf(d.estado) < 0) return json_({ ok: false, error: 'Estado no válido.' });
+    cambios.estado = d.estado;
+  }
+  if (d.mision_real_id !== undefined) {
+    const id = parseInt(d.mision_real_id, 10);
+    cambios.mision_real_id = id > 0 ? id : '';
+  }
+  const realFinal = cambios.mision_real_id !== undefined ? cambios.mision_real_id : Number(cfg.mision_real_id) || '';
+  if (cambios.estado === 'revelado' && !realFinal) {
+    return json_({ ok: false, error: 'Primero elige la misión real.' });
+  }
+
+  const lock = LockService.getScriptLock();
+  try { lock.waitLock(25000); } catch (err) {
+    return json_({ ok: false, error: 'El servidor está ocupado. Intenta de nuevo en unos segundos.' });
+  }
+  try {
+    escribirConfig_(cambios);
+    SpreadsheetApp.flush();
+  } finally {
+    lock.releaseLock();
+  }
+  CacheService.getScriptCache().remove(CACHE_KEY);
+  const nuevo = leerConfig_();
+  return json_({
+    ok: true,
+    estado: nuevo.estado,
+    mision_real_id: nuevo.estado === 'revelado' ? Number(nuevo.mision_real_id) || null : null,
+  });
+}
+
+function escribirConfig_(cambios) {
+  const hoja = SpreadsheetApp.getActive().getSheetByName(HOJA_CONFIG);
+  const valores = hoja.getDataRange().getValues();
+  Object.keys(cambios).forEach(function (clave) {
+    let fila = -1;
+    for (let i = 1; i < valores.length; i++) {
+      if (String(valores[i][0]).trim() === clave) { fila = i + 1; break; }
+    }
+    if (fila === -1) hoja.appendRow([clave, cambios[clave]]);
+    else hoja.getRange(fila, 2).setValue(cambios[clave]);
+  });
 }
 
 /** Quita espacios extra y evita que un texto se interprete como fórmula. */

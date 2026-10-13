@@ -48,7 +48,12 @@ Abre http://localhost:8000. Para simular estados: `?estado=solo_kiosko`, `?estad
 2. **Settings → Pages → Source: Deploy from a branch → main / (root)**.
 3. En un par de minutos la página estará en `https://TU-USUARIO.github.io/NOMBRE-DEL-REPO/`.
 
-## Control durante el evento (pestaña Config)
+## Control durante el evento
+
+Desde la computadora del kiosko, toca **Panel de control** (arriba). Ahí puedes abrir o cerrar la votación,
+dejar votar solo a esa computadora, y elegir la misión real para revelar el ranking. No hace falta abrir la hoja.
+
+También se puede hacer a mano en la pestaña Config de la hoja:
 
 | estado        | Qué pasa |
 |---------------|----------|

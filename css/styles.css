@@ -35,7 +35,9 @@ body { display: flex; flex-direction: column; min-height: 100dvh; background: va
   display: flex; flex-direction: column; align-items: center;
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.08), 0 2px 0 rgba(0,0,0,.15);
   min-width: 220px; max-width: 100%;
+  text-decoration: none; cursor: pointer;
 }
+.placa:hover { background: #000; }
 .placa-nombre {
   font-variation-settings: "wdth" 125; font-weight: 700;
   font-size: 1.15rem; letter-spacing: .06em; line-height: 1.1;
@@ -46,8 +48,8 @@ body { display: flex; flex-direction: column; min-height: 100dvh; background: va
 }
 .kiosko-chip {
   position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
-  font-size: .75rem; background: var(--tinta); color: var(--blanco);
-  padding: 4px 10px; border-radius: 999px;
+  font: 600 .8rem/1.2 "Archivo", sans-serif; background: var(--tinta); color: var(--blanco);
+  padding: 7px 12px; border-radius: 999px; border: 0; cursor: pointer;
 }
 
 @media (max-width: 640px) {
@@ -74,6 +76,14 @@ input[type="text"] {
   background: var(--blanco); outline: none;
 }
 input[type="text"]:focus { border-color: var(--tinta); box-shadow: 0 0 0 3px rgba(28,42,74,.12); }
+.campos-nombre { display: flex; flex-direction: column; }
+.campos-nombre > div { margin-bottom: 18px; }
+.campos-nombre > div:last-child { margin-bottom: 0; }
+@media (min-width: 480px) {
+  .campos-nombre { flex-direction: row; }
+  .campos-nombre > div { flex: 1 1 0; min-width: 0; margin-bottom: 0; margin-right: 14px; }
+  .campos-nombre > div:last-child { margin-right: 0; }
+}
 .error { color: var(--sello); min-height: 1.3em; margin: 8px 0; font-size: .92rem; }
 
 .btn {
@@ -123,6 +133,26 @@ input[type="text"]:focus { border-color: var(--tinta); box-shadow: 0 0 0 3px rgb
 .panel { padding: 16px 16px 40px; }
 .panel h2 { font-size: 1.25rem; font-weight: 800; font-variation-settings: "wdth" 90; margin: 18px 0 10px; }
 .acciones .btn { margin-top: 2px; }
+/* Panel de control del kiosko */
+.control {
+  border: 1.5px solid var(--tinta); border-radius: var(--radio);
+  padding: 4px 14px 10px; margin-bottom: 16px; background: var(--blanco);
+}
+.control h2 { margin-top: 12px; }
+.estado-actual { margin: 0 0 12px; line-height: 1.4; }
+.botones-estado { display: grid; gap: 8px; margin-bottom: 16px; }
+.btn-estado {
+  font: inherit; font-weight: 600; text-align: left; cursor: pointer;
+  padding: 11px 14px; border-radius: var(--radio);
+  border: 1.5px solid var(--linea); background: var(--papel); color: var(--tinta);
+}
+.btn-estado[aria-pressed="true"] { background: var(--tinta); border-color: var(--tinta); color: var(--blanco); }
+.btn-estado[aria-pressed="true"]::after { content: " (actual)"; font-weight: 400; opacity: .8; }
+.control .elegida { margin-bottom: 10px; }
+.control .buscador { margin-bottom: 10px; }
+.control .error:empty { margin: 0; min-height: 0; }
+#control button:disabled { opacity: .55; cursor: not-allowed; }
+
 .lista-cabecera { display: flex; justify-content: space-between; align-items: center; }
 .cuenta { font-weight: 500; color: var(--tinta-suave); font-size: 1rem; }
 .aviso {
@@ -171,6 +201,14 @@ input[type="text"]:focus { border-color: var(--tinta); box-shadow: 0 0 0 3px rgb
 .leaflet-popup-content { font-family: "Archivo", sans-serif; color: var(--tinta); font-size: .92rem; line-height: 1.4; }
 .leaflet-popup-content strong { font-size: 1rem; }
 .leaflet-popup-content ul { padding-left: 1.1em; margin: 6px 0 0; }
+.lista-cerca { list-style: none; padding: 0 !important; margin: 6px 0 0 !important; }
+.lista-cerca button {
+  display: block; width: 100%; text-align: left; font: inherit; color: var(--tinta);
+  background: none; border: 0; border-top: 1px solid var(--linea); padding: 10px 2px; cursor: pointer;
+}
+.lista-cerca li:first-child button { border-top: 0; }
+.lista-cerca button:hover { text-decoration: underline; }
+.leaflet-popup-content .mas { margin: 6px 0 0; color: var(--tinta-suave); font-size: .85rem; }
 .popup-btn {
   margin-top: 8px; font: inherit; font-weight: 700; color: var(--blanco); background: var(--sello);
   border: 0; border-radius: 7px; padding: 8px 10px; cursor: pointer; width: 100%;

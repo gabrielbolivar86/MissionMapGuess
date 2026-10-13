@@ -1,5 +1,6 @@
 (function () {
   "use strict";
+  window.__appIniciada = true;
 
   const CFG = window.APP_CONFIG || {};
   const MAX_OPCIONES = 3;
@@ -21,6 +22,19 @@
     const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLng / 2) ** 2;
     return 2 * R * Math.asin(Math.sqrt(h));
   }
+  // fetch con límite de tiempo: nunca dejar la página "cargando" para siempre
+  async function fetchT(url, opts, seg) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), (seg || 15) * 1000);
+    try { return await fetch(url, { ...(opts || {}), signal: ctrl.signal }); }
+    finally { clearTimeout(t); }
+  }
+  function fallaCarga(msg) {
+    const c = $("cargando");
+    if (c && !c.hidden) c.textContent = msg;
+  }
+  window.addEventListener("error", (e) => fallaCarga("Error al iniciar la página: " + (e.message || "desconocido") + ". Recarga o avisa al organizador."));
+
   let toastTimer;
   function toast(msg) {
     const t = $("toast");
@@ -55,30 +69,45 @@
   const api = {
     async listar() {
       if (DEMO) return demo.listar();
-      const r = await fetch(CFG.API_URL + "?t=" + Date.now(), { redirect: "follow" });
+      const r = await fetchT(CFG.API_URL + "?t=" + Date.now(), { redirect: "follow" }, 20);
       if (!r.ok) throw new Error("HTTP " + r.status);
       return r.json();
     },
     async guardar(payload) {
       if (DEMO) return demo.guardar(payload);
       // text/plain evita la petición previa (CORS) que Apps Script no admite
-      const r = await fetch(CFG.API_URL, { method: "POST", body: JSON.stringify(payload), redirect: "follow" });
+      const r = await fetchT(CFG.API_URL, { method: "POST", body: JSON.stringify(payload), redirect: "follow" }, 40);
       if (!r.ok) throw new Error("HTTP " + r.status);
       return r.json();
     },
   };
+  api.admin = async (payload) => {
+    payload = { ...payload, accion: "admin", kiosko: KIOSKO };
+    if (DEMO) return demo.admin(payload);
+    const r = await fetchT(CFG.API_URL, { method: "POST", body: JSON.stringify(payload), redirect: "follow" }, 40);
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  };
   const demo = {
     leer() { try { return JSON.parse(store.get("demo_pred") || "[]"); } catch (e) { return []; } },
+    estado() { return store.get("demo_estado") || params.get("estado") || "abierta"; },
     listar() {
-      const estado = params.get("estado") || "abierta";
+      const estado = demo.estado();
       return Promise.resolve({
         ok: true, estado,
-        mision_real_id: estado === "revelado" ? Number(params.get("real")) || 366 : null,
+        mision_real_id: estado === "revelado" ? Number(store.get("demo_real") || params.get("real")) || 366 : null,
         predicciones: demo.leer(),
       });
     },
+    admin(p) {
+      if (!p.kiosko) return Promise.resolve({ ok: false, error: "Esta computadora no tiene permiso para controlar la votación." });
+      if (p.mision_real_id !== undefined) store.set("demo_real", String(p.mision_real_id));
+      if (p.estado === "revelado" && !store.get("demo_real")) return Promise.resolve({ ok: false, error: "Primero elige la misión real." });
+      if (p.estado) store.set("demo_estado", p.estado);
+      return demo.listar();
+    },
     guardar(p) {
-      const estado = params.get("estado") || "abierta";
+      const estado = demo.estado();
       if (estado === "cerrada" || estado === "revelado") return Promise.resolve({ ok: false, error: "La votación ya está cerrada." });
       if (estado === "solo_kiosko" && !p.kiosko) return Promise.resolve({ ok: false, error: "La votación en línea ya cerró. Ahora solo se vota en la reunión." });
       const lista = demo.leer();
@@ -177,7 +206,7 @@
               role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="sug-${i}">
             <ul class="sugerencias" id="sug-${i}" role="listbox" hidden></ul>
           </div>`;
-        conectarBuscador(li.querySelector("input"), li.querySelector(".sugerencias"), i);
+        conectarBuscador(li.querySelector("input"), li.querySelector(".sugerencias"), i, (m) => elegirOpcion(i, m));
       }
       ol.appendChild(li);
     });
@@ -217,19 +246,22 @@
     return res.slice(0, 8).map((r) => r.m);
   }
 
-  function conectarBuscador(input, lista, i) {
+  function elegirOpcion(i, m) {
+    if (elegidas.some((x, j) => j !== i && x && x.id === m.id)) {
+      $("error-mision").textContent = "Ya elegiste esa misión en otra opción.";
+      return;
+    }
+    $("error-mision").textContent = "";
+    elegidas[i] = { id: m.id };
+    pintarOpciones();
+  }
+
+  // Buscador con lista desplegable. `i` solo sirve para ids únicos; `alElegir(m)` recibe la misión.
+  function conectarBuscador(input, lista, i, alElegir) {
     let resultados = [];
     let activo = -1;
     const cerrar = () => { lista.hidden = true; input.setAttribute("aria-expanded", "false"); activo = -1; };
-    const elegir = (m) => {
-      if (elegidas.some((x, j) => j !== i && x && x.id === m.id)) {
-        $("error-mision").textContent = "Ya elegiste esa misión en otra opción.";
-        return;
-      }
-      $("error-mision").textContent = "";
-      elegidas[i] = { id: m.id };
-      pintarOpciones();
-    };
+    const elegir = (m) => { cerrar(); alElegir(m); };
     const pintar = () => {
       if (!input.value.trim()) { cerrar(); return; }
       lista.innerHTML = resultados.length
@@ -298,24 +330,79 @@
   function iniciarMapa() {
     if (mapa) return;
     mapa = L.map("mapa", { worldCopyJump: true, zoomControl: true, minZoom: 2 }).setView([10, -40], 2);
+    window.__mapa = mapa; // útil para depurar desde la consola
     // Fondo de mapa: OpenStreetMap (gratis, sin clave). Se puede cambiar en config.js.
     L.tileLayer(CFG.MAPA_URL || "https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 18,
       attribution: CFG.MAPA_CREDITO || '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(mapa);
 
+    // Los puntos solo se dibujan; los toques se resuelven buscando las misiones cercanas al dedo,
+    // así no hace falta acercar el mapa para atinarle a un punto pequeño.
+    const tactil = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+    const RADIO_TOQUE = tactil ? 26 : 12; // px alrededor del toque/clic
     const lienzo = L.canvas({ padding: 0.5 });
     capaBase = L.layerGroup().addTo(mapa);
     for (const m of MISIONES) {
       L.circleMarker([m.lat, m.lng], {
-        renderer: lienzo, radius: 3.5, weight: 1, color: "#5A6580", fillColor: "#FFFFFF", fillOpacity: 1,
-      }).bindTooltip(m.n, { direction: "top" })
-        .on("click", () => abrirPopupMision(m.id))
-        .addTo(capaBase);
+        renderer: lienzo, interactive: false, radius: tactil ? 4.5 : 3.5, weight: 1,
+        color: "#5A6580", fillColor: "#FFFFFF", fillOpacity: 1,
+      }).addTo(capaBase);
     }
     capaPredicciones = L.layerGroup().addTo(mapa);
+
+    mapa.on("click", (e) => {
+      const cerca = misionesCerca(e.containerPoint, RADIO_TOQUE);
+      if (!cerca.length) return;
+      // Una sola, o una claramente más cerca que las demás: se abre directo
+      if (cerca.length === 1 || (cerca[0].d < 6 && cerca[1].d > 14)) return abrirPopupMision(cerca[0].m.id);
+      abrirListaCerca(e.latlng, cerca);
+    });
+
+    // En computadora: al pasar el mouse sobre un punto se ve el nombre
+    if (!tactil) {
+      const tip = L.tooltip({ direction: "top", offset: [0, -6] });
+      let pendiente = false;
+      mapa.on("mousemove", (e) => {
+        if (pendiente) return;
+        pendiente = true;
+        requestAnimationFrame(() => {
+          pendiente = false;
+          const c = misionesCerca(e.containerPoint, 8)[0];
+          mapa.getContainer().style.cursor = c ? "pointer" : "";
+          if (c) tip.setLatLng([c.m.lat, c.m.lng]).setContent(esc(c.m.n)).addTo(mapa);
+          else tip.remove();
+        });
+      });
+      mapa.on("mouseout zoomstart", () => tip.remove());
+    }
     pintarMapa();
   }
+
+  function misionesCerca(punto, radio) {
+    const res = [];
+    for (const m of MISIONES) {
+      const p = mapa.latLngToContainerPoint([m.lat, m.lng]);
+      const d = Math.hypot(p.x - punto.x, p.y - punto.y);
+      if (d <= radio) res.push({ m, d });
+    }
+    return res.sort((a, b) => a.d - b.d);
+  }
+
+  function abrirListaCerca(latlng, cerca) {
+    const max = 8;
+    const items = cerca.slice(0, max).map((c) =>
+      `<li><button type="button" data-ver="${c.m.id}">${esc(c.m.n)}</button></li>`).join("");
+    const mas = cerca.length > max ? `<p class="mas">Hay ${cerca.length - max} más aquí. Acerca el mapa para verlas.</p>` : "";
+    L.popup({ maxWidth: 260 }).setLatLng(latlng)
+      .setContent(`<strong>¿Cuál misión?</strong><ul class="lista-cerca">${items}</ul>${mas}`)
+      .openOn(mapa);
+  }
+
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-ver]");
+    if (b) abrirPopupMision(Number(b.dataset.ver));
+  });
 
   let realCentrada = false;
   function centrarEnReal() {
@@ -436,6 +523,7 @@
     $("btn-nueva").hidden = !puedeVotar() || !!KIOSKO;
     $("btn-siguiente").hidden = !puedeVotar() || !KIOSKO;
     pintarRanking(personas);
+    pintarControl();
   }
 
   function pintarRanking(personas) {
@@ -459,6 +547,89 @@
         <span>${esc(r.nombre)}<small>${esc(r.m.n)}</small></span>
         <span class="km ${r.d === 0 ? "exacto" : ""}">${r.d === 0 ? "¡Exacto!" : Math.round(r.d).toLocaleString("es") + " km"}</span>
       </li>`).join("");
+  }
+
+  // ---------- Panel de control (solo en el kiosko) ----------
+  const ESTADO_TXT = {
+    abierta: "Abierta para todos",
+    solo_kiosko: "Solo en esta computadora",
+    cerrada: "Cerrada",
+    revelado: "Misión revelada",
+  };
+  let realElegida = null;
+
+  function pintarControl() {
+    if (!KIOSKO) return;
+    $("control").hidden = false;
+    const real = datos.mision_real_id && POR_ID.get(datos.mision_real_id);
+    $("estado-actual").textContent = (ESTADO_TXT[datos.estado] || datos.estado) + (real ? ": " + real.n : "");
+    document.querySelectorAll(".btn-estado").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.estado === datos.estado)));
+    $("btn-revelar").disabled = !realElegida;
+  }
+
+  function pintarRealElegida() {
+    const caja = $("real-elegida");
+    const buscador = $("real-buscar").parentElement;
+    if (!realElegida) {
+      caja.hidden = true; buscador.hidden = false; $("real-buscar").value = "";
+      return;
+    }
+    buscador.hidden = true; caja.hidden = false;
+    caja.innerHTML = `<div><strong>${esc(realElegida.n)}</strong><small>${esc(realElegida.p)}</small></div>
+      <button type="button" class="btn-mini" id="btn-real-cambiar">Cambiar</button>`;
+  }
+
+  async function enviarControl(payload, mensajeOk) {
+    $("error-control").textContent = "";
+    const botones = document.querySelectorAll("#control button");
+    botones.forEach((b) => { b.disabled = true; });
+    try {
+      const r = await api.admin(payload);
+      if (!r.ok) { $("error-control").textContent = r.error || "No se pudo aplicar el cambio."; return; }
+      datos.estado = r.estado;
+      datos.mision_real_id = r.mision_real_id || null;
+      realCentrada = false;
+      toast(mensajeOk);
+      await cargarPredicciones();
+    } catch (err) {
+      $("error-control").textContent = "No hay conexión con el servidor. Intenta de nuevo.";
+    } finally {
+      botones.forEach((b) => { b.disabled = false; });
+      pintarControl();
+    }
+  }
+
+  function iniciarControl() {
+    if (!KIOSKO) return;
+    conectarBuscador($("real-buscar"), $("real-sug"), "real", (m) => {
+      realElegida = m; pintarRealElegida(); pintarControl();
+    });
+    $("control").addEventListener("click", (e) => {
+      if (e.target.closest("#btn-real-cambiar")) {
+        realElegida = null; pintarRealElegida(); pintarControl(); $("real-buscar").focus();
+        return;
+      }
+      const b = e.target.closest("[data-estado]");
+      if (!b) return;
+      const estado = b.dataset.estado;
+      if (estado === datos.estado) return;
+      const confirmar = {
+        cerrada: "¿Cerrar la votación? Nadie podrá votar, ni siquiera en esta computadora.",
+        solo_kiosko: "¿Cerrar la votación en línea? Solo se podrá votar en esta computadora.",
+        abierta: datos.estado === "revelado" ? "¿Ocultar el resultado y volver a abrir la votación para todos?" : "",
+      }[estado];
+      if (confirmar && !window.confirm(confirmar)) return;
+      enviarControl({ estado }, "Votación: " + ESTADO_TXT[estado].toLowerCase());
+    });
+    $("btn-revelar").addEventListener("click", () => {
+      if (!realElegida) return;
+      if (!window.confirm(`¿Revelar que la misión es ${realElegida.n}? Todos verán el ranking y la votación se cerrará.`)) return;
+      enviarControl({ estado: "revelado", mision_real_id: realElegida.id }, "¡Misión revelada!");
+    });
+    $("kiosko-chip").addEventListener("click", () => {
+      mostrar("vista-mapa");
+      setTimeout(() => $("control").scrollIntoView({ behavior: "smooth", block: "start" }), 80);
+    });
   }
 
   $("personas").addEventListener("click", (e) => {
@@ -497,11 +668,16 @@
     $("kiosko-chip").hidden = !KIOSKO;
     if (!KIOSKO) nombre = store.get("nombre") || "";
 
+    if (typeof L === "undefined") {
+      fallaCarga("No se pudo cargar la librería del mapa (Leaflet). Revisa tu conexión y recarga.");
+      return;
+    }
     try {
-      const r = await fetch("data/misiones.json");
+      const r = await fetchT("data/misiones.json", {}, 20);
+      if (!r.ok) throw new Error("HTTP " + r.status);
       MISIONES = await r.json();
     } catch (e) {
-      $("cargando").textContent = "No se pudo cargar la lista de misiones. Recarga la página.";
+      fallaCarga("No se pudo cargar la lista de misiones (data/misiones.json: " + e.message + "). Recarga la página.");
       return;
     }
     for (const m of MISIONES) {
@@ -509,6 +685,7 @@
       m._k = norm(m.n + " " + m.o + " " + m.p);
       POR_ID.set(m.id, m);
     }
+    iniciarControl();
     await cargarPredicciones();
 
     const yaVoto = nombre && datos.predicciones.some((p) => norm(p.n) === norm(nombre));
