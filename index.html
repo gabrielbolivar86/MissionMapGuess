@@ -9,12 +9,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,400..800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
-  <link rel="stylesheet" href="css/styles.css?v=6">
+  <link rel="stylesheet" href="css/styles.css?v=7">
 </head>
 <body>
   <header class="encabezado">
     <a class="placa" href="./" title="Ir al inicio" aria-label="Ir al inicio">
-      <span class="placa-nombre" id="placa-nombre">ÉLDER</span>
+      <span class="placa-nombre" id="placa-nombre"></span>
       <span class="placa-linea">¿A dónde irá?</span>
     </a>
     <button class="kiosko-chip" id="kiosko-chip" type="button" hidden>Panel de control</button>
@@ -23,8 +23,8 @@
   <main>
     <!-- Paso 1: nombre -->
     <section class="paso" id="paso-nombre" hidden>
-      <h1>¿Quién eres?</h1>
-      <p class="ayuda">Así sabremos de quién es cada predicción.</p>
+      <h1 id="titulo-nombre">¿Quién eres?</h1>
+      <p class="ayuda" id="ayuda-nombre">Así sabremos de quién es cada predicción.</p>
       <form id="form-nombre" novalidate>
         <div class="campos-nombre">
           <div>
@@ -38,6 +38,7 @@
         </div>
         <p class="error" id="error-nombre" role="alert"></p>
         <button class="btn btn-principal" type="submit">Continuar</button>
+        <button class="btn btn-enlace" type="button" id="btn-volver-nombre" hidden>Volver al mapa</button>
       </form>
     </section>
 
@@ -52,7 +53,7 @@
         <button class="btn btn-principal" type="submit" id="btn-guardar">Guardar mi predicción</button>
         <button class="btn btn-enlace" type="button" id="btn-ver-mapa">Ver el mapa sin votar</button>
       </form>
-      <p class="quien">Votando como <strong id="quien-nombre"></strong>. <button class="btn-mini" type="button" id="btn-cambiar-nombre">cambiar</button></p>
+      <p class="quien"><span id="quien-texto">Votando como </span><strong id="quien-nombre"></strong>. <button class="btn-mini" type="button" id="btn-cambiar-nombre">cambiar</button></p>
     </section>
 
     <!-- Vista: mapa + lista -->
@@ -91,6 +92,7 @@
           <button class="btn btn-principal" type="button" id="btn-nueva">Agregar otra predicción</button>
           <button class="btn btn-principal" type="button" id="btn-siguiente" hidden>Siguiente persona</button>
         </div>
+        <button class="btn btn-enlace" type="button" id="btn-otra-persona" hidden>Enviar la predicción de otra persona</button>
         <section id="ranking" hidden>
           <h2>Ranking</h2>
           <p class="ayuda" id="ranking-mision"></p>
@@ -113,8 +115,8 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-  <script src="js/config.js?v=6"></script>
-  <script src="js/app.js?v=6"></script>
+  <script src="js/config.js?v=7"></script>
+  <script src="js/app.js?v=7"></script>
   <script>
     // Si js/app.js no llegó a ejecutarse (archivo faltante en GitHub), avisa en vez de quedarse cargando.
     setTimeout(function () {

@@ -22,6 +22,7 @@ const CACHE_KEY = 'lista_v1';
 const CACHE_SEG = 15;
 const ESTADOS = ['abierta', 'solo_kiosko', 'cerrada', 'revelado'];
 const MAX_POR_PERSONA = 2;
+const ESPERA_SEG = 60; // espera entre envíos de una misma persona (el kiosko no espera)
 
 function configurar() {
   const ss = SpreadsheetApp.getActive();
@@ -116,6 +117,13 @@ function doPost(e) {
     .filter(function (x) { return x.id > 0 && x.id < 10000; });
   if (!misiones.length) return json_({ ok: false, error: 'Elige al menos una misión.' });
 
+  // Una persona no puede enviar otra predicción antes de 1 minuto (evita envíos repetidos)
+  const cache = CacheService.getScriptCache();
+  const claveEspera = 'espera_' + normalizar_(nombre).slice(0, 200);
+  if (!esKiosko && cache.get(claveEspera)) {
+    return json_({ ok: false, error: 'Espera un minuto antes de enviar otra predicción para ' + nombre + '.' });
+  }
+
   const ahora = new Date();
   const origen = esKiosko ? 'kiosko' : 'en línea';
   const disp = limpiar_(datos.dispositivo).slice(0, 40);
@@ -154,7 +162,8 @@ function doPost(e) {
   } finally {
     lock.releaseLock();
   }
-  CacheService.getScriptCache().remove(CACHE_KEY);
+  if (!esKiosko) cache.put(claveEspera, '1', ESPERA_SEG);
+  cache.remove(CACHE_KEY);
   return json_({ ok: true, guardadas: filas.length });
 }
 

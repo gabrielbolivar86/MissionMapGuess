@@ -72,7 +72,11 @@ y después de cada voto muestra **Siguiente persona**. Para quitarlo, abre la p�
 
 - Cada persona puede hacer **máximo 2 predicciones** (juntas o una y luego otra). Apps Script lo valida
   por nombre y apellido, así que no se puede saltar el límite.
-- Se toma la más cercana a la misión real (distancia en línea recta en km).
+- Para el premio **solo cuenta la primera predicción** de cada persona (por hora de envío).
+- Una misma persona debe esperar 1 minuto entre envíos, y el botón Actualizar se puede usar 1 vez por minuto.
+  El kiosko no tiene esta espera.
+- Desde cualquier celular se puede **enviar la predicción de otra persona** (botón en la lista), sin perder el nombre propio.
+- El ranking se ordena por distancia en línea recta (km) entre esa primera predicción y la misión real.
 - Acertar la misión exacta = 0 km. Empates: gana quien votó primero.
 - Las personas se identifican por su nombre y apellido (sin importar tildes ni mayúsculas).
 - Las misiones de una misma ciudad (p. ej. Lima Norte y Lima Este) están separadas unos km en el mapa

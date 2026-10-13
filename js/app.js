@@ -3,8 +3,9 @@
   window.__appIniciada = true;
 
   const CFG = window.APP_CONFIG || {};
-  const MAX_POR_PERSONA = 2; // predicciones que puede hacer cada persona (y las que cuentan)
-  const CUENTAN = MAX_POR_PERSONA;
+  const MAX_POR_PERSONA = 2; // predicciones que puede hacer cada persona
+  const CUENTAN = 1;          // solo la primera cuenta para el premio
+  const ESPERA_SEG = 60;      // espera entre envíos de una misma persona y entre "Actualizar" (no aplica al kiosko)
   const esCelular = () => window.matchMedia("(max-width: 899px)").matches;
 
   // ---------- Utilidades ----------
@@ -138,11 +139,26 @@
     window.scrollTo(0, 0);
     if (id === "vista-mapa") {
       iniciarMapa();
-      setTimeout(() => { mapa.invalidateSize(); centrarEnReal(); revisarRevelado(); }, 50);
+      setTimeout(() => { mapa.invalidateSize(); mapa.fire("resize"); centrarEnReal(); revisarRevelado(); }, 50);
       programarRefresco();
     } else {
       clearInterval(refrescoTimer);
     }
+  }
+
+  // Enviar la predicción de otra persona desde este mismo celular (sin perder el nombre propio)
+  let modoOtra = false;
+  let nombrePropio = "";
+  function empezarOtraPersona() {
+    if (!puedeVotar()) return;
+    if (!modoOtra) { nombrePropio = nombre; modoOtra = true; }
+    nombre = "";
+    pedirNombre();
+  }
+  function terminarOtraPersona() {
+    if (!modoOtra) return;
+    nombre = nombrePropio;
+    modoOtra = false;
   }
 
   function irAPrimerPaso() {
@@ -154,8 +170,14 @@
   // Muestra el paso del nombre. En el kiosko siempre empieza vacío;
   // en un celular se rellena con lo último guardado para corregirlo fácil.
   function pedirNombre() {
-    $("nombre").value = KIOSKO ? "" : (store.get("nombre_n") || "");
-    $("apellido").value = KIOSKO ? "" : (store.get("nombre_a") || "");
+    const vacio = KIOSKO || modoOtra;
+    $("nombre").value = vacio ? "" : (store.get("nombre_n") || "");
+    $("apellido").value = vacio ? "" : (store.get("nombre_a") || "");
+    $("titulo-nombre").textContent = modoOtra ? "¿De quién es esta predicción?" : "¿Quién eres?";
+    $("ayuda-nombre").textContent = modoOtra
+      ? "Escribe el nombre y apellido de la persona a la que estás ayudando."
+      : "Así sabremos de quién es cada predicción.";
+    $("btn-volver-nombre").hidden = !(modoOtra || KIOSKO || prediccionesDe(nombrePropio || store.get("nombre") || "").length);
     $("error-nombre").textContent = "";
     mostrar("paso-nombre");
     $("nombre").focus();
@@ -170,9 +192,9 @@
     if (a.length < 2) { $("error-nombre").textContent = "Escribe tu apellido."; $("apellido").focus(); return; }
     $("error-nombre").textContent = "";
     nombre = n + " " + a;
-    if (!KIOSKO) { store.set("nombre", nombre); store.set("nombre_n", n); store.set("nombre_a", a); }
+    if (!KIOSKO && !modoOtra) { store.set("nombre", nombre); store.set("nombre_n", n); store.set("nombre_a", a); }
     if (restantesDe(nombre) <= 0) {
-      if (KIOSKO) {
+      if (KIOSKO || modoOtra) {
         $("error-nombre").textContent = `${nombre} ya hizo sus ${MAX_POR_PERSONA} predicciones.`;
         nombre = "";
         return;
@@ -186,8 +208,13 @@
 
   $("btn-cambiar-nombre").addEventListener("click", () => {
     nombre = "";
-    store.del("nombre");
+    if (!modoOtra) store.del("nombre");
     pedirNombre();
+  });
+  $("btn-volver-nombre").addEventListener("click", () => {
+    terminarOtraPersona();
+    if (!nombre && !KIOSKO) nombre = store.get("nombre") || "";
+    mostrar("vista-mapa");
   });
 
   // ---------- Paso 2: misiones ----------
@@ -213,8 +240,9 @@
     if (preseleccion && ya.includes(preseleccion)) preseleccion = null;
     elegidas = [preseleccion ? { id: preseleccion } : null];
     $("ayuda-mision").textContent = ya.length
-      ? `Ya elegiste ${POR_ID.get(ya[0]) ? POR_ID.get(ya[0]).n : "una misión"}. Te queda 1 predicción más.`
-      : `Escribe una ciudad o país y elige de la lista. Cada persona puede elegir hasta ${MAX_POR_PERSONA} misiones.`;
+      ? `Ya elegiste ${POR_ID.get(ya[0]) ? POR_ID.get(ya[0]).n : "una misión"}, que es la que cuenta para el premio. Puedes agregar 1 opción más.`
+      : `Escribe una ciudad o país y elige de la lista. Puedes poner hasta ${MAX_POR_PERSONA} misiones; para el premio solo cuenta la primera.`;
+    $("quien-texto").textContent = modoOtra ? "Votando por " : "Votando como ";
     $("quien-nombre").textContent = nombre;
     $("error-mision").textContent = "";
     pintarOpciones();
@@ -231,7 +259,7 @@
     elegidas.forEach((sel, i) => {
       const li = document.createElement("li");
       li.className = "opcion";
-      const etiqueta = maxOpciones < MAX_POR_PERSONA ? "Tu segunda predicción" : i === 0 ? "Tu predicción" : "Segunda opción";
+      const etiqueta = maxOpciones < MAX_POR_PERSONA || i > 0 ? "Segunda opción (no cuenta para el premio)" : "Tu predicción";
       const quitar = i > 0 ? `<button type="button" class="btn-mini" data-quitar="${i}">Quitar</button>` : "";
       if (sel) {
         const m = POR_ID.get(sel.id);
@@ -337,6 +365,12 @@
     e.preventDefault();
     const ids = elegidas.filter(Boolean).map((x) => x.id);
     if (!ids.length) { $("error-mision").textContent = "Elige una misión de la lista."; return; }
+    const claveEspera = "envio_" + norm(nombre);
+    const faltan = Math.ceil((Number(store.get(claveEspera) || 0) + ESPERA_SEG * 1000 - Date.now()) / 1000);
+    if (!KIOSKO && faltan > 0) {
+      $("error-mision").textContent = `Espera ${faltan} segundos antes de enviar otra predicción para ${nombre}.`;
+      return;
+    }
     const btn = $("btn-guardar");
     btn.disabled = true; btn.textContent = "Guardando…";
     try {
@@ -351,7 +385,9 @@
         if (r.estado) { datos.estado = r.estado; }
         return;
       }
-      toast(ids.length === 1 ? "¡Predicción guardada!" : `¡${ids.length} predicciones guardadas!`);
+      store.set(claveEspera, String(Date.now()));
+      toast(modoOtra ? `¡Predicción de ${nombre} guardada!` : ids.length === 1 ? "¡Predicción guardada!" : `¡${ids.length} predicciones guardadas!`);
+      terminarOtraPersona();
       await cargarPredicciones();
       mostrar("vista-mapa");
       enfocarMision(ids[0]);
@@ -362,7 +398,7 @@
     }
   });
 
-  $("btn-ver-mapa").addEventListener("click", () => mostrar("vista-mapa"));
+  $("btn-ver-mapa").addEventListener("click", () => { terminarOtraPersona(); mostrar("vista-mapa"); });
 
   function dispositivoId() {
     let d = store.get("dispositivo");
@@ -373,7 +409,19 @@
   // ---------- Mapa ----------
   function iniciarMapa() {
     if (mapa) return;
-    mapa = L.map("mapa", { worldCopyJump: true, zoomControl: true, minZoom: 2 }).setView([10, -40], 2);
+    // maxBounds en latitud: el mapa no se puede arrastrar más allá de los polos (evita las zonas en blanco)
+    mapa = L.map("mapa", {
+      worldCopyJump: true, zoomControl: true, minZoom: 1,
+      maxBounds: L.latLngBounds([-85, -100000], [85, 100000]), maxBoundsViscosity: 1,
+    }).setView([10, -40], 2);
+    // Zoom mínimo según el alto de la pantalla, para que el mundo siempre llene el mapa de arriba a abajo
+    const ajustarZoomMin = () => {
+      const alto = mapa.getSize().y;
+      if (!alto) return;
+      mapa.setMinZoom(Math.max(1, Math.ceil(Math.log2(alto / 256))));
+    };
+    ajustarZoomMin();
+    mapa.on("resize", ajustarZoomMin);
     window.__mapa = mapa; // útil para depurar desde la consola
     // Fondo de mapa: OpenStreetMap (gratis, sin clave). Se puede cambiar en config.js.
     L.tileLayer(CFG.MAPA_URL || "https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -461,7 +509,7 @@
 
   function popupHtml(id) {
     const m = POR_ID.get(id);
-    const quienes = prediccionesQueCuentan().filter((p) => p.m === id).map((p) => p.n);
+    const quienes = prediccionesVisibles().filter((p) => p.m === id).map((p) => p.n);
     const unicos = [...new Set(quienes)];
     const ya = nombre ? prediccionesDe(nombre) : [];
     const puedeElegir = puedeVotar() && (!nombre || (ya.length < MAX_POR_PERSONA && !ya.includes(id)));
@@ -496,7 +544,7 @@
     if (!mapa) return;
     capaPredicciones.clearLayers();
     const grupos = new Map();
-    for (const p of prediccionesQueCuentan()) {
+    for (const p of prediccionesVisibles()) {
       if (!POR_ID.has(p.m)) continue;
       if (!grupos.has(p.m)) grupos.set(p.m, new Set());
       grupos.get(p.m).add(p.n);
@@ -533,9 +581,9 @@
     setTimeout(() => abrirPopupMision(id), 300);
   }
 
-  // Solo las primeras predicciones de cada persona (las que cuentan) se muestran en el mapa
-  function prediccionesQueCuentan() {
-    return agruparPorPersona().flatMap((per) => per.preds.slice(0, CUENTAN));
+  // En el mapa se ven hasta 2 predicciones por persona
+  function prediccionesVisibles() {
+    return agruparPorPersona().flatMap((per) => per.preds.slice(0, MAX_POR_PERSONA));
   }
 
   // ---------- Hoja deslizable (celular) ----------
@@ -546,7 +594,8 @@
     $("btn-hoja").setAttribute("aria-expanded", String(!!abrir));
   }
   $("btn-hoja").addEventListener("click", () => abrirHoja(!$("panel").classList.contains("abierta")));
-  $("btn-barra-accion").addEventListener("click", () => {
+  $("btn-barra-accion").addEventListener("click", (e) => {
+    if (e.currentTarget.dataset.otra === "true") return empezarOtraPersona();
     if (KIOSKO) { nombre = ""; }
     irAPrimerPaso();
   });
@@ -595,9 +644,11 @@
 
     // Barra inferior (celular)
     const accion = $("btn-barra-accion");
-    accion.hidden = !(puedeAgregar || (KIOSKO && puedeVotar()));
-    accion.textContent = KIOSKO ? "Siguiente persona" : hechas ? "Agregar otra" : "Votar";
-    const total = personas.reduce((t, per) => t + Math.min(per.preds.length, CUENTAN), 0);
+    accion.hidden = !puedeVotar();
+    accion.textContent = KIOSKO ? "Siguiente persona" : puedeAgregar ? (hechas ? "Agregar otra" : "Votar") : "Otra persona";
+    accion.dataset.otra = String(!KIOSKO && !puedeAgregar);
+    $("btn-otra-persona").hidden = !puedeVotar() || !!KIOSKO;
+    const total = personas.reduce((t, per) => t + Math.min(per.preds.length, MAX_POR_PERSONA), 0);
     $("hoja-titulo").textContent = datos.estado === "revelado" ? "Ver ranking" : KIOSKO ? "Panel y lista" : "Ver predicciones";
     let sub = personas.length
       ? `${personas.length} ${personas.length === 1 ? "persona" : "personas"}, ${total} ${total === 1 ? "predicción" : "predicciones"}`
@@ -612,7 +663,7 @@
     const real = datos.mision_real_id && POR_ID.get(datos.mision_real_id);
     $("ranking").hidden = !real;
     if (!real) return;
-    $("ranking-mision").textContent = `La misión es ${real.n}. Cuentan las ${CUENTAN} primeras predicciones de cada persona; se toma la más cercana.`;
+    $("ranking-mision").textContent = `La misión es ${real.n}. Para el premio cuenta solo la primera predicción de cada persona.`;
     const filas = personas.map((per) => {
       let mejor = null;
       per.preds.slice(0, CUENTAN).forEach((p) => {
@@ -721,7 +772,14 @@
   });
   $("btn-nueva").addEventListener("click", irAPrimerPaso);
   $("btn-siguiente").addEventListener("click", () => { nombre = ""; irAPrimerPaso(); });
-  $("btn-actualizar").addEventListener("click", async () => { await cargarPredicciones(); toast("Lista actualizada"); });
+  $("btn-otra-persona").addEventListener("click", empezarOtraPersona);
+  $("btn-actualizar").addEventListener("click", async () => {
+    const faltan = Math.ceil((Number(store.get("ultima_act") || 0) + ESPERA_SEG * 1000 - Date.now()) / 1000);
+    if (!KIOSKO && faltan > 0) { toast(`La lista se actualiza sola. Puedes actualizar de nuevo en ${faltan} s.`); return; }
+    store.set("ultima_act", String(Date.now()));
+    await cargarPredicciones();
+    toast("Lista actualizada");
+  });
 
   // ---------- Carga de datos ----------
   let estadoAnterior = null;
@@ -757,7 +815,7 @@
   }
 
   async function iniciar() {
-    const placa = (CFG.MISIONERO || "Élder").toUpperCase();
+    const placa = (CFG.MISIONERO || "").toUpperCase();
     $("placa-nombre").textContent = placa;
     $("titulo-mision").textContent = `¿A qué misión crees que irá ${CFG.MISIONERO || "nuestro misionero"}?`;
     $("kiosko-chip").hidden = !KIOSKO;

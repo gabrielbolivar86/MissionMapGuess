@@ -78,12 +78,12 @@ id,nombre_original,nombre_es,pais,region,ciudad,codigo_pais,lat,lng,revisar
 77,Brazil Salvador Mission,Misión Brasil Salvador,Brasil,,Salvador,br,-12.98225,-38.48128,
 78,Brazil Santa Maria Mission,Misión Brasil Santa Maria,Brasil,,Santa Maria,br,-29.68605,-53.80692,
 79,Brazil Santos Mission,Misión Brasil Santos,Brasil,,Santos,br,-23.96094,-46.31663,
-80,Brazil São Bernardo Mission,Misión Brasil São Bernardo,Brasil,,São Bernardo,br,-3.36503,-42.42248,
-81,Brazil São Paulo East Mission,Misión Brasil São Paulo Este,Brasil,,São Paulo,br,-1.20432,-47.15839,
-82,Brazil São Paulo Interlagos Mission,Misión Brasil São Paulo Interlagos,Brasil,,São Paulo,br,-1.20432,-47.15839,
-83,Brazil São Paulo North Mission,Misión Brasil São Paulo Norte,Brasil,,São Paulo,br,-1.20432,-47.15839,
-84,Brazil São Paulo South Mission,Misión Brasil São Paulo Sur,Brasil,,São Paulo,br,-1.20432,-47.15839,
-85,Brazil São Paulo West Mission,Misión Brasil São Paulo Oeste,Brasil,,São Paulo,br,-1.20432,-47.15839,
+80,Brazil São Bernardo Mission,Misión Brasil São Bernardo,Brasil,,São Bernardo,br,-23.69140,-46.56460,corregido a mano
+81,Brazil São Paulo East Mission,Misión Brasil São Paulo Este,Brasil,,São Paulo,br,-23.55050,-46.53512,corregido a mano
+82,Brazil São Paulo Interlagos Mission,Misión Brasil São Paulo Interlagos,Brasil,,São Paulo,br,-23.70150,-46.69660,corregido a mano
+83,Brazil São Paulo North Mission,Misión Brasil São Paulo Norte,Brasil,,São Paulo,br,-23.46050,-46.63330,corregido a mano
+84,Brazil São Paulo South Mission,Misión Brasil São Paulo Sur,Brasil,,São Paulo,br,-23.64050,-46.63330,corregido a mano
+85,Brazil São Paulo West Mission,Misión Brasil São Paulo Oeste,Brasil,,São Paulo,br,-23.55050,-46.73148,corregido a mano
 86,Brazil Sorocaba Mission,Misión Brasil Sorocaba,Brasil,,Sorocaba,br,-23.50035,-47.45829,
 87,Brazil Teresina Mission,Misión Brasil Teresina,Brasil,,Teresina,br,-5.08746,-42.80496,
 88,Brazil Vitória Mission,Misión Brasil Vitória,Brasil,,Vitória,br,-20.32009,-40.33767,
