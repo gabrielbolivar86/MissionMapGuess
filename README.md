@@ -82,6 +82,17 @@ Todos ven una tarjeta grande con la misión, la fecha y el idioma, el ranking, y
 la primera predicción de cada persona hasta la misión real (las 3 más cercanas, más marcadas).
 Al tocar un nombre del ranking se resalta su línea.
 
+## Filtro del mapa
+
+En la esquina superior derecha del mapa hay un cuadro "Mostrar". Al desmarcar **Todas las misiones** se ocultan
+los puntos de las 505 misiones y quedan solo las predicciones (y las líneas del ranking). Cada persona elige;
+su navegador lo recuerda.
+
+La casilla **Templos** muestra 345 templos (puntos celestes). Al tocar uno se ve su nombre y la misión más
+cercana. Los templos vienen de `data/ChurchofJesusChristTemples.csv` y se convirtieron a `data/templos.json`
+(solo nombre y coordenadas). 40 templos anunciados todavía no tienen coordenadas y no aparecen.
+El archivo de templos solo se descarga si alguien activa la casilla.
+
 ## Apodos
 
 Debajo del apellido hay un enlace discreto "¿Quieres agregar tu apodo?". Si alguien pone un apodo, en el mapa,

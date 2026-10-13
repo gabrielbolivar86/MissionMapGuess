@@ -430,6 +430,11 @@
   }
 
   // ---------- Mapa ----------
+  // El mapa repite el mundo hacia los lados; todo se dibuja también en las copias vecinas
+  const COPIAS = [-360, 0, 360];
+  let lienzo = null;
+  const esTactil = () => window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+  const lngCercana = (lng) => (mapa ? lng + 360 * Math.round((mapa.getCenter().lng - lng) / 360) : lng);
   function iniciarMapa() {
     if (mapa) return;
     // maxBounds en latitud: el mapa no se puede arrastrar más allá de los polos (evita las zonas en blanco)
@@ -456,14 +461,18 @@
     // así no hace falta acercar el mapa para atinarle a un punto pequeño.
     const tactil = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
     const RADIO_TOQUE = tactil ? 26 : 12; // px alrededor del toque/clic
-    const lienzo = L.canvas({ padding: 0.5 });
-    capaBase = L.layerGroup().addTo(mapa);
+    lienzo = L.canvas({ padding: 0.5 });
+    capaBase = L.layerGroup();
     for (const m of MISIONES) {
-      L.circleMarker([m.lat, m.lng], {
-        renderer: lienzo, interactive: false, radius: tactil ? 4.5 : 3.5, weight: 1,
-        color: "#005B94", fillColor: "#FFFFFF", fillOpacity: 1,
-      }).addTo(capaBase);
+      for (const off of COPIAS) {
+        L.circleMarker([m.lat, m.lng + off], {
+          renderer: lienzo, interactive: false, radius: tactil ? 4.5 : 3.5, weight: 1,
+          color: "#005B94", fillColor: "#FFFFFF", fillOpacity: 1,
+        }).addTo(capaBase);
+      }
     }
+    if (verMisiones) capaBase.addTo(mapa);
+    agregarFiltro();
     capaLineas = L.layerGroup().addTo(mapa);
     capaPredicciones = L.layerGroup().addTo(mapa);
 
@@ -471,10 +480,10 @@
     mapa.on("dragstart", () => abrirHoja(false));
     mapa.on("click", (e) => {
       abrirHoja(false);
-      const cerca = misionesCerca(e.containerPoint, RADIO_TOQUE);
+      const cerca = lugaresCerca(e.containerPoint, RADIO_TOQUE);
       if (!cerca.length) return;
-      // Una sola, o una claramente más cerca que las demás: se abre directo
-      if (cerca.length === 1 || (cerca[0].d < 6 && cerca[1].d > 14)) return abrirPopupMision(cerca[0].m.id);
+      // Uno solo, o uno claramente más cerca que los demás: se abre directo
+      if (cerca.length === 1 || (cerca[0].d < 6 && cerca[1].d > 14)) return abrirLugar(cerca[0]);
       abrirListaCerca(e.latlng, cerca);
     });
 
@@ -487,9 +496,9 @@
         pendiente = true;
         requestAnimationFrame(() => {
           pendiente = false;
-          const c = misionesCerca(e.containerPoint, 8)[0];
+          const c = lugaresCerca(e.containerPoint, 8)[0];
           mapa.getContainer().style.cursor = c ? "pointer" : "";
-          if (c) tip.setLatLng([c.m.lat, c.m.lng]).setContent(esc(c.m.n)).addTo(mapa);
+          if (c) tip.setLatLng([c.m.lat, c.lng]).setContent(esc(c.m.n)).addTo(mapa);
           else tip.remove();
         });
       });
@@ -501,26 +510,128 @@
   function misionesCerca(punto, radio) {
     const res = [];
     for (const m of MISIONES) {
-      const p = mapa.latLngToContainerPoint([m.lat, m.lng]);
-      const d = Math.hypot(p.x - punto.x, p.y - punto.y);
-      if (d <= radio) res.push({ m, d });
+      for (const off of COPIAS) {
+        const p = mapa.latLngToContainerPoint([m.lat, m.lng + off]);
+        const d = Math.hypot(p.x - punto.x, p.y - punto.y);
+        if (d <= radio) { res.push({ m, d, lng: m.lng + off }); break; }
+      }
     }
     return res.sort((a, b) => a.d - b.d);
   }
 
+  // Misiones y templos visibles cerca de un punto de la pantalla
+  function lugaresCerca(punto, radio) {
+    const res = [];
+    if (verMisiones) misionesCerca(punto, radio).forEach((c) => res.push({ ...c, tipo: "mision" }));
+    if (verTemplos && TEMPLOS) {
+      TEMPLOS.forEach((t, i) => {
+        for (const off of COPIAS) {
+          const p = mapa.latLngToContainerPoint([t.lat, t.lng + off]);
+          const d = Math.hypot(p.x - punto.x, p.y - punto.y);
+          if (d <= radio) { res.push({ m: t, d, lng: t.lng + off, tipo: "templo", i }); break; }
+        }
+      });
+    }
+    return res.sort((a, b) => a.d - b.d);
+  }
+
+  function abrirLugar(c) {
+    if (c.tipo === "templo") return abrirPopupTemplo(c.i, c.lng);
+    abrirPopupMision(c.m.id);
+  }
+
+  function abrirPopupTemplo(i, lng) {
+    const t = TEMPLOS[i];
+    // La misión más cercana al templo, como pista para adivinar
+    let cerca = null;
+    for (const m of MISIONES) { const d = km(t, m); if (!cerca || d < cerca.d) cerca = { m, d }; }
+    L.popup({ maxWidth: 240 }).setLatLng([t.lat, lng === undefined ? lngCercana(t.lng) : lng])
+      .setContent(`<strong>${esc(t.n)}</strong>${cerca ? `<br><span class="popup-sub">Misión más cercana:</span><br><button type="button" class="popup-enlace" data-ver="${cerca.m.id}">${esc(cerca.m.n)}</button>` : ""}`)
+      .openOn(mapa);
+  }
+
+  // ---------- Templos (se cargan solo si alguien los activa) ----------
+  let TEMPLOS = null;
+  let capaTemplos = null;
+  let verTemplos = store.get("ver_templos") === "1";
+  async function mostrarTemplos(mostrar) {
+    if (!mostrar) { if (capaTemplos) capaTemplos.remove(); return; }
+    if (!TEMPLOS) {
+      try {
+        const r = await fetchT("data/templos.json", {}, 20);
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        TEMPLOS = await r.json();
+      } catch (err) {
+        toast("No se pudieron cargar los templos. Intenta de nuevo.");
+        verTemplos = false;
+        const chk = $("chk-templos"); if (chk) chk.checked = false;
+        return;
+      }
+      capaTemplos = L.layerGroup();
+      const tactil = esTactil();
+      TEMPLOS.forEach((t) => {
+        for (const off of COPIAS) {
+          L.circleMarker([t.lat, t.lng + off], {
+            renderer: lienzo, interactive: false, radius: tactil ? 5 : 4, weight: 1.5,
+            color: "#FFFFFF", fillColor: "#00A3E0", fillOpacity: 1,
+          }).addTo(capaTemplos);
+        }
+      });
+    }
+    if (verTemplos) capaTemplos.addTo(mapa);
+  }
+
+  // ---------- Filtro de capas (esquina del mapa) ----------
+  let verMisiones = store.get("ver_misiones") !== "0";
+  function agregarFiltro() {
+    const Filtro = L.Control.extend({
+      options: { position: "topright" },
+      onAdd() {
+        const div = L.DomUtil.create("div", "filtro-mapa");
+        div.innerHTML = `<p class="filtro-titulo">Mostrar</p>
+          <label><input type="checkbox" id="chk-misiones" ${verMisiones ? "checked" : ""}> <span class="muestra muestra-mision"></span>Todas las misiones</label>
+          <label><input type="checkbox" id="chk-templos" ${verTemplos ? "checked" : ""}> <span class="muestra muestra-templo"></span>Templos</label>`;
+        L.DomEvent.disableClickPropagation(div);
+        L.DomEvent.disableScrollPropagation(div);
+        div.querySelector("#chk-misiones").addEventListener("change", (e) => {
+          verMisiones = e.target.checked;
+          store.set("ver_misiones", verMisiones ? "1" : "0");
+          if (verMisiones) capaBase.addTo(mapa); else capaBase.remove();
+          mapa.closePopup();
+        });
+        div.querySelector("#chk-templos").addEventListener("change", (e) => {
+          verTemplos = e.target.checked;
+          store.set("ver_templos", verTemplos ? "1" : "0");
+          mostrarTemplos(verTemplos);
+          mapa.closePopup();
+        });
+        if (verTemplos) setTimeout(() => mostrarTemplos(true), 0);
+        return div;
+      },
+    });
+    const filtro = new Filtro().addTo(mapa);
+    // En celular el cuadro tapa las ventanitas del mapa: se oculta mientras hay una abierta
+    mapa.on("popupopen", () => { if (esCelular()) filtro.getContainer().classList.add("oculto"); });
+    mapa.on("popupclose", () => filtro.getContainer().classList.remove("oculto"));
+  }
+
   function abrirListaCerca(latlng, cerca) {
     const max = 8;
-    const items = cerca.slice(0, max).map((c) =>
-      `<li><button type="button" data-ver="${c.m.id}">${esc(c.m.n)}</button></li>`).join("");
-    const mas = cerca.length > max ? `<p class="mas">Hay ${cerca.length - max} más aquí. Acerca el mapa para verlas.</p>` : "";
+    const items = cerca.slice(0, max).map((c) => c.tipo === "templo"
+      ? `<li><button type="button" data-templo="${c.i}" data-lng="${c.lng}"><span class="muestra muestra-templo"></span>${esc(c.m.n)}</button></li>`
+      : `<li><button type="button" data-ver="${c.m.id}"><span class="muestra muestra-mision"></span>${esc(c.m.n)}</button></li>`).join("");
+    const mas = cerca.length > max ? `<p class="mas">Hay ${cerca.length - max} más aquí. Acerca el mapa para verlos.</p>` : "";
+    const titulo = cerca.every((c) => c.tipo === "mision") ? "¿Cuál misión?" : cerca.every((c) => c.tipo === "templo") ? "¿Cuál templo?" : "¿Cuál quieres ver?";
     L.popup({ maxWidth: 260 }).setLatLng(latlng)
-      .setContent(`<strong>¿Cuál misión?</strong><ul class="lista-cerca">${items}</ul>${mas}`)
+      .setContent(`<strong>${titulo}</strong><ul class="lista-cerca">${items}</ul>${mas}`)
       .openOn(mapa);
   }
 
   document.addEventListener("click", (e) => {
     const b = e.target.closest("[data-ver]");
     if (b) abrirPopupMision(Number(b.dataset.ver));
+    const t = e.target.closest("[data-templo]");
+    if (t) abrirPopupTemplo(Number(t.dataset.templo), Number(t.dataset.lng));
   });
 
   let realCentrada = false;
@@ -528,7 +639,7 @@
     const real = datos.mision_real_id && POR_ID.get(datos.mision_real_id);
     if (!real || !mapa || realCentrada) return;
     realCentrada = true;
-    mapa.setView([real.lat, real.lng], 4);
+    mapa.setView([real.lat, lngCercana(real.lng)], 4);
   }
 
   function popupHtml(id) {
@@ -548,7 +659,7 @@
 
   function abrirPopupMision(id) {
     const m = POR_ID.get(id);
-    L.popup({ maxWidth: 240 }).setLatLng([m.lat, m.lng]).setContent(popupHtml(id)).openOn(mapa);
+    L.popup({ maxWidth: 240 }).setLatLng([m.lat, lngCercana(m.lng)]).setContent(popupHtml(id)).openOn(mapa);
   }
 
   document.addEventListener("click", (e) => {
@@ -581,29 +692,33 @@
       const corto = (n) => n;
       const etiqueta = nombres.length <= 2 ? nombres.map(corto).join(", ") : `${corto(nombres[0])}, ${corto(nombres[1])} +${nombres.length - 2}`;
       const esReal = datos.mision_real_id === id;
-      L.marker([m.lat, m.lng], {
-        icon: L.divIcon({ className: "", html: `<div class="pin${esReal ? " real" : ""}"></div>`, iconSize: esReal ? [30, 30] : [22, 22], iconAnchor: esReal ? [4, 34] : [3, 25] }),
-        zIndexOffset: esReal ? 1000 : nombres.length,
-        title: m.n,
-      }).bindTooltip(etiqueta, { permanent: true, direction: "top", offset: esReal ? [12, -34] : [8, -24], className: "etiqueta-pin" + (esReal ? " real" : "") })
-        .on("click", () => abrirPopupMision(id))
-        .addTo(capaPredicciones);
+      for (const off of COPIAS) {
+        L.marker([m.lat, m.lng + off], {
+          icon: L.divIcon({ className: "", html: `<div class="pin${esReal ? " real" : ""}"></div>`, iconSize: esReal ? [30, 30] : [22, 22], iconAnchor: esReal ? [4, 34] : [3, 25] }),
+          zIndexOffset: esReal ? 1000 : nombres.length,
+          title: m.n,
+        }).bindTooltip(etiqueta, { permanent: true, direction: "top", offset: esReal ? [12, -34] : [8, -24], className: "etiqueta-pin" + (esReal ? " real" : "") })
+          .on("click", () => abrirPopupMision(id))
+          .addTo(capaPredicciones);
+      }
     }
     const real = datos.mision_real_id && POR_ID.get(datos.mision_real_id);
     if (real && !grupos.has(real.id)) {
-      L.marker([real.lat, real.lng], {
-        icon: L.divIcon({ className: "", html: `<div class="pin real"></div>`, iconSize: [30, 30], iconAnchor: [4, 34] }),
-        zIndexOffset: 1000,
-      }).bindTooltip(real.n, { permanent: true, direction: "top", offset: [12, -34], className: "etiqueta-pin real" })
-        .on("click", () => abrirPopupMision(real.id))
-        .addTo(capaPredicciones);
+      for (const off of COPIAS) {
+        L.marker([real.lat, real.lng + off], {
+          icon: L.divIcon({ className: "", html: `<div class="pin real"></div>`, iconSize: [30, 30], iconAnchor: [4, 34] }),
+          zIndexOffset: 1000,
+        }).bindTooltip(real.n, { permanent: true, direction: "top", offset: [12, -34], className: "etiqueta-pin real" })
+          .on("click", () => abrirPopupMision(real.id))
+          .addTo(capaPredicciones);
+      }
     }
   }
 
   function enfocarMision(id) {
     const m = POR_ID.get(id);
     if (!m || !mapa) return;
-    mapa.setView([m.lat, m.lng], 5);
+    mapa.setView([m.lat, lngCercana(m.lng)], 5);
     setTimeout(() => abrirPopupMision(id), 300);
   }
 
@@ -754,28 +869,41 @@
       while (lng - real.lng > 180) lng -= 360;
       while (real.lng - lng > 180) lng += 360;
       const top = i < 3;
-      const linea = L.polyline([[r.m.lat, lng], [real.lat, real.lng]], {
+      const estilo = {
         color: top ? "#005B94" : "#4B5E70", weight: top ? 3 : 1.5,
         opacity: top ? 0.9 : 0.55, dashArray: top ? null : "4 6",
-      }).bindTooltip(`${i + 1}. ${esc(r.nombre)}: ${Math.round(r.d).toLocaleString("es")} km`, { sticky: true })
-        .addTo(capaLineas);
-      linea.estilo = { color: linea.options.color, weight: linea.options.weight, opacity: linea.options.opacity, dashArray: linea.options.dashArray };
-      lineas.push(linea);
+      };
+      // Una línea por cada copia del mundo, para que se vea igual al arrastrar el mapa hacia los lados
+      const copias = COPIAS.map((off) => {
+        const linea = L.polyline([[r.m.lat, lng + off], [real.lat, real.lng + off]], estilo)
+          .bindTooltip(`${i + 1}. ${esc(r.nombre)}: ${Math.round(r.d).toLocaleString("es")} km`, { sticky: true })
+          .addTo(capaLineas);
+        linea.estilo = estilo;
+        return linea;
+      });
+      lineas.push(copias);
     });
   }
 
   function resaltarLinea(i) {
     document.querySelectorAll("#ranking-lista li").forEach((li) => li.classList.toggle("activa", Number(li.dataset.linea) === i));
-    lineas.forEach((l, j) => {
-      if (!l) return;
-      if (j === i) { l.setStyle({ color: "#00A3E0", weight: 5, opacity: 1, dashArray: null }); l.bringToFront(); }
-      else l.setStyle(l.estilo);
+    lineas.forEach((grupo, j) => {
+      if (!grupo) return;
+      grupo.forEach((l) => {
+        if (j === i) { l.setStyle({ color: "#00A3E0", weight: 5, opacity: 1, dashArray: null }); l.bringToFront(); }
+        else l.setStyle(l.estilo);
+      });
     });
-    const l = lineas[i];
     const real = datos.mision_real_id && POR_ID.get(datos.mision_real_id);
     abrirHoja(false);
-    if (l) { mapa.fitBounds(l.getBounds(), { padding: [50, 50], maxZoom: 11 }); l.openTooltip(l.getCenter()); }
-    else if (real) mapa.setView([real.lat, real.lng], 6);
+    const grupo = lineas[i];
+    if (grupo) {
+      // La copia de la línea más cercana a lo que se está viendo
+      const c = mapa.getCenter().lng;
+      const l = grupo.slice().sort((a, b) => Math.abs(a.getCenter().lng - c) - Math.abs(b.getCenter().lng - c))[0];
+      mapa.fitBounds(l.getBounds(), { padding: [50, 50], maxZoom: 11 });
+      setTimeout(() => l.openTooltip(l.getCenter()), 350);
+    } else if (real) mapa.setView([real.lat, lngCercana(real.lng)], 6);
   }
 
   $("ranking-lista").addEventListener("click", (e) => {
