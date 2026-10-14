@@ -10,6 +10,12 @@ window.APP_CONFIG = {
   // Cada cuántos segundos se refresca la lista de predicciones en el mapa.
   REFRESCO_SEG: 60,
 
+  // Punto de partida para "la misión más lejana" en las estadísticas (la casa del misionero).
+  ORIGEN: { nombre: "La Paz, Bolivia", pais: "Bolivia", lat: -16.5, lng: -68.15 },
+
+  // ID de la misión donde vive (de misiones.csv). No se puede elegir: no lo asignan a su propia misión.
+  MISION_PROPIA: 44, // Bolivia La Paz
+
   // Fondo del mapa. Vacío = OpenStreetMap (gratis, sin clave ni cuenta).
   // Para usar otro proveedor pega aquí su URL de tiles y su texto de crédito.
   MAPA_URL: "",

@@ -93,6 +93,14 @@ cercana. Los templos vienen de `data/ChurchofJesusChristTemples.csv` y se convir
 (solo nombre y coordenadas). 40 templos anunciados todavía no tienen coordenadas y no aparecen.
 El archivo de templos solo se descarga si alguien activa la casilla.
 
+## Estadísticas
+
+En la lista hay una sección plegable **Estadísticas**: personas y predicciones, países más votados (barras),
+misiones más votadas, la misión más lejana y la más cercana a casa, y qué porcentaje cree que se queda en el país.
+Al revelar se abre sola y agrega: quiénes acertaron la misión y el país, distancia promedio, quién se alejó más,
+cuántos votos tuvo la misión real y en qué lugar quedó su país.
+"Casa" se configura en `js/config.js` → `ORIGEN` (nombre, país, latitud y longitud).
+
 ## Apodos
 
 Debajo del apellido hay un enlace discreto "¿Quieres agregar tu apodo?". Si alguien pone un apodo, en el mapa,

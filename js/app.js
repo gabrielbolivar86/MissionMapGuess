@@ -259,7 +259,7 @@
       toast(`Ya hiciste tus ${MAX_POR_PERSONA} predicciones.`);
       return mostrar("vista-mapa");
     }
-    if (preseleccion && ya.includes(preseleccion)) preseleccion = null;
+    if (preseleccion && (ya.includes(preseleccion) || preseleccion === PROPIA)) preseleccion = null;
     elegidas = [preseleccion ? { id: preseleccion } : null];
     $("ayuda-mision").textContent = ya.length
       ? `Ya elegiste ${POR_ID.get(ya[0]) ? POR_ID.get(ya[0]).n : "una misión"}, que es la que cuenta para el premio. Puedes agregar 1 opción más.`
@@ -322,12 +322,17 @@
     if (inp) inp.focus();
   });
 
-  function buscar(texto) {
+  // Misión donde vive el misionero: no se la pueden asignar, así que no se puede elegir
+  const PROPIA = Number(CFG.MISION_PROPIA) || 0;
+  const NOMBRE_CORTO = (CFG.MISIONERO || "El misionero").split(" ")[0];
+
+  function buscar(texto, incluirPropia) {
     const q = norm(texto);
     if (!q) return [];
     const palabras = q.split(" ");
     const res = [];
     for (const m of MISIONES) {
+      if (m.id === PROPIA && !incluirPropia) continue;
       if (palabras.every((p) => m._k.includes(p))) {
         res.push({ m, score: m._kn.startsWith(q) ? 0 : (" " + m._kn).includes(" " + palabras[0]) ? 1 : 2 });
       }
@@ -351,7 +356,7 @@
   }
 
   // Buscador con lista desplegable. `i` solo sirve para ids únicos; `alElegir(m)` recibe la misión.
-  function conectarBuscador(input, lista, i, alElegir) {
+  function conectarBuscador(input, lista, i, alElegir, incluirPropia) {
     let resultados = [];
     let activo = -1;
     const cerrar = () => { lista.hidden = true; input.setAttribute("aria-expanded", "false"); activo = -1; };
@@ -365,7 +370,7 @@
       input.setAttribute("aria-expanded", "true");
       input.setAttribute("aria-activedescendant", activo >= 0 ? `sug-${i}-${activo}` : "");
     };
-    input.addEventListener("input", () => { resultados = buscar(input.value); activo = resultados.length ? 0 : -1; pintar(); });
+    input.addEventListener("input", () => { resultados = buscar(input.value, incluirPropia); activo = resultados.length ? 0 : -1; pintar(); });
     input.addEventListener("keydown", (e) => {
       if (lista.hidden) return;
       if (e.key === "ArrowDown") { e.preventDefault(); activo = Math.min(activo + 1, resultados.length - 1); pintar(); }
@@ -647,12 +652,13 @@
     const quienes = prediccionesVisibles().filter((p) => p.m === id).map((p) => p.v);
     const unicos = [...new Set(quienes)];
     const ya = nombre ? prediccionesDe(nombre) : [];
-    const puedeElegir = puedeVotar() && (!nombre || (ya.length < MAX_POR_PERSONA && !ya.includes(id)));
+    const puedeElegir = id !== PROPIA && puedeVotar() && (!nombre || (ya.length < MAX_POR_PERSONA && !ya.includes(id)));
     let html = `<strong>${esc(m.n)}</strong><br><span>${esc(m.p)}</span>`;
+    if (id === PROPIA) html += `<br><span class="popup-sub">${esc(NOMBRE_CORTO)} vive aquí; no lo pueden asignar a su propia misión.</span>`;
     if (datos.mision_real_id === id) html += `<br><b>Esta es la misión real</b>`;
     html += unicos.length
       ? `<ul>${unicos.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>`
-      : `<br><em>Nadie la eligió todavía.</em>`;
+      : id === PROPIA ? "" : `<br><em>Nadie la eligió todavía.</em>`;
     if (puedeElegir) html += `<button class="popup-btn" type="button" data-votar="${id}">Elegir esta misión</button>`;
     return html;
   }
@@ -802,6 +808,7 @@
     if (realSub) sub = `Irá a la Misión ${realSub.n}`;
     $("hoja-sub").textContent = sub;
     pintarRanking(personas);
+    pintarEstadisticas(personas);
     pintarControl();
   }
 
@@ -834,6 +841,85 @@
         <span class="km ${r.d === 0 ? "exacto" : ""}">${r.d === 0 ? "¡Exacto!" : Math.round(r.d).toLocaleString("es") + " km"}</span>
       </li>`).join("");
   }
+
+  // ---------- Estadísticas ----------
+  const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
+  const kmTxt = (d) => Math.round(d).toLocaleString("es") + " km";
+  const ORIGEN = CFG.ORIGEN && isFinite(CFG.ORIGEN.lat) ? CFG.ORIGEN : null;
+  let estadisticasAbiertas = null; // respeta si la persona la abrió o cerró
+
+  function pintarEstadisticas(personas) {
+    const caja = $("estadisticas");
+    // Para popularidad se cuentan todas las predicciones (hasta 2 por persona)
+    const todas = personas.flatMap((per) => per.preds.slice(0, MAX_POR_PERSONA)
+      .map((p) => ({ per, m: POR_ID.get(p.m) })).filter((x) => x.m));
+    caja.hidden = !todas.length;
+    if (!todas.length) return;
+    const real = datos.mision_real_id && POR_ID.get(datos.mision_real_id);
+    if (estadisticasAbiertas === null) caja.open = !!real;
+
+    const contar = (clave) => {
+      const c = new Map();
+      todas.forEach((x) => c.set(clave(x.m), (c.get(clave(x.m)) || 0) + 1));
+      return [...c.entries()].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0]), "es"));
+    };
+    const paises = contar((m) => m.p);
+    const misiones = contar((m) => m.id);
+    const bloques = [];
+
+    bloques.push(`<p class="est-resumen">${plural(personas.length, "persona", "personas")}, ${plural(todas.length, "predicción", "predicciones")} en ${plural(paises.length, "país", "países")}.</p>`);
+
+    // Países más votados (barras)
+    const max = paises[0][1];
+    bloques.push(`<h3>Países más votados</h3><ol class="barras">${paises.slice(0, 5).map(([p, n]) =>
+      `<li title="${esc(p)}: ${plural(n, "predicción", "predicciones")}"><span class="barra-nombre">${esc(p)}</span>
+        <span class="barra-pista"><span class="barra" style="width:${Math.max(4, (n / max) * 100)}%"></span></span>
+        <span class="barra-valor">${n}</span></li>`).join("")}</ol>`);
+
+    // Misiones más votadas
+    const topMis = misiones.filter(([, n]) => n > 1).slice(0, 3);
+    bloques.push(`<h3>Misiones más votadas</h3>` + (topMis.length
+      ? `<ol class="est-lista">${topMis.map(([id, n]) => `<li><button type="button" data-ir="${id}">${esc(POR_ID.get(id).n)}</button> <span class="est-num">${plural(n, "voto", "votos")}</span></li>`).join("")}</ol>`
+      : `<p class="est-nota">Todavía ninguna misión tiene más de un voto.</p>`));
+
+    // Más lejos y más cerca de casa
+    if (ORIGEN) {
+      const conDist = todas.map((x) => ({ ...x, d: km(ORIGEN, x.m) })).sort((a, b) => b.d - a.d);
+      const lejos = conDist[0], cerca = conDist[conDist.length - 1];
+      const enCasa = personas.filter((per) => { const m = POR_ID.get(per.preds[0] && per.preds[0].m); return m && m.p === ORIGEN.pais; }).length;
+      bloques.push(`<div class="datos-est">
+        <div><p class="dato-titulo">La más lejana de ${esc(ORIGEN.nombre.split(",")[0])}</p><p class="dato-valor">${esc(lejos.m.n)}</p><p class="dato-sub">${kmTxt(lejos.d)}, elegida por ${esc(lejos.per.visible)}</p></div>
+        <div><p class="dato-titulo">La más cercana a ${esc(ORIGEN.nombre.split(",")[0])}</p><p class="dato-valor">${esc(cerca.m.n)}</p><p class="dato-sub">${kmTxt(cerca.d)}, elegida por ${esc(cerca.per.visible)}</p></div>
+        <div><p class="dato-titulo">Creen que se queda en ${esc(ORIGEN.pais)}</p><p class="dato-valor">${Math.round((enCasa / personas.length) * 100)}%</p><p class="dato-sub">${plural(enCasa, "persona", "personas")} con su primera predicción</p></div>
+      </div>`);
+    }
+
+    // Después de revelar
+    if (real) {
+      const filas = calcularRanking(personas, real);
+      const exactos = filas.filter((r) => r.d === 0);
+      const mismoPais = filas.filter((r) => r.m.p === real.p);
+      const promedio = filas.reduce((t, r) => t + r.d, 0) / (filas.length || 1);
+      const peor = filas[filas.length - 1];
+      const votosReal = todas.filter((x) => x.m.id === real.id).length;
+      const posPais = paises.findIndex(([p]) => p === real.p);
+      bloques.push(`<h3>Con la misión revelada</h3><div class="datos-est">
+        <div><p class="dato-titulo">Acertaron la misión</p><p class="dato-valor">${exactos.length}</p><p class="dato-sub">${exactos.length ? exactos.map((r) => esc(r.nombre)).join(", ") : "Nadie le atinó exacto"}</p></div>
+        <div><p class="dato-titulo">Acertaron el país</p><p class="dato-valor">${mismoPais.length}</p><p class="dato-sub">de ${plural(filas.length, "persona", "personas")}</p></div>
+        <div><p class="dato-titulo">Distancia promedio</p><p class="dato-valor">${kmTxt(promedio)}</p><p class="dato-sub">entre la primera predicción y ${esc(real.n)}</p></div>
+        ${peor && peor.d > 0 ? `<div><p class="dato-titulo">El que más se alejó</p><p class="dato-valor">${esc(peor.nombre)}</p><p class="dato-sub">${esc(peor.m.n)}, a ${kmTxt(peor.d)}</p></div>` : ""}
+        <div><p class="dato-titulo">Votos para ${esc(real.n)}</p><p class="dato-valor">${votosReal}</p><p class="dato-sub">${votosReal ? "contando también las segundas opciones" : "Nadie la eligió"}</p></div>
+        <div><p class="dato-titulo">${esc(real.p)} en el ranking de países</p><p class="dato-valor">${posPais >= 0 ? posPais + 1 + "°" : "Sin votos"}</p><p class="dato-sub">${posPais >= 0 ? `con ${plural(paises[posPais][1], "predicción", "predicciones")}` : "Nadie eligió ese país"}</p></div>
+      </div>`);
+    }
+    bloques.push(`<p class="est-nota">Países y misiones cuentan las 2 predicciones de cada persona; el ranking y los aciertos, solo la primera.</p>`);
+    $("estadisticas-contenido").innerHTML = bloques.join("");
+  }
+  $("estadisticas").addEventListener("toggle", (e) => { estadisticasAbiertas = e.target.open; });
+  $("estadisticas-contenido").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-ir]");
+    if (b) { abrirHoja(false); enfocarMision(Number(b.dataset.ir)); }
+  });
 
   function fechaLarga(iso) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(iso || "")) return "";

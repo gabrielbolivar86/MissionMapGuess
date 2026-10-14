@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,400..800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
-  <link rel="stylesheet" href="css/styles.css?v=11">
+  <link rel="stylesheet" href="css/styles.css?v=13">
 </head>
 <body>
   <header class="encabezado">
@@ -125,6 +125,10 @@
           <p class="ayuda" id="ranking-mision"></p>
           <ol class="ranking-lista" id="ranking-lista"></ol>
         </section>
+        <details class="estadisticas" id="estadisticas" hidden>
+          <summary><h2>Estadísticas</h2></summary>
+          <div id="estadisticas-contenido"></div>
+        </details>
         <section>
           <div class="lista-cabecera">
             <h2>Predicciones <span class="cuenta" id="cuenta"></span></h2>
@@ -142,8 +146,8 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-  <script src="js/config.js?v=11"></script>
-  <script src="js/app.js?v=11"></script>
+  <script src="js/config.js?v=13"></script>
+  <script src="js/app.js?v=13"></script>
   <script>
     // Si js/app.js no llegó a ejecutarse (archivo faltante en GitHub), avisa en vez de quedarse cargando.
     setTimeout(function () {
